@@ -472,7 +472,7 @@ const I18N = {
     backup:'Backup', exportJson:'Back up to Files', exportCsv:'Export CSV', importJson:'Import backup',
     backupDue:'Time to back up', lastBackup:'Last backup', neverBackup:'never', backupNow:'Back up now', later:'Later',
     backupSaved:'Backup saved',
-    backupHint:'Tap Save to Files → choose the same folder (e.g. iCloud Drive) → Save → Replace. The old backup is replaced by the new one.',
+    backupHint:'Tap Save to Files → choose a folder (e.g. iCloud Drive → Daily Ledger) → Save. Each backup is named with today\'s date; to restore, pick the newest one.',
     clearAll:'Delete all records', confirmClear:'Delete ALL records? This cannot be undone.',
     confirmImport:'Replace all current records with this backup ({n} records)?',
     importOk:'Imported {n} records', importBad:'This file is not a valid backup.',
@@ -499,7 +499,7 @@ const I18N = {
     backup:'备份', exportJson:'备份到"文件"', exportCsv:'导出 CSV', importJson:'导入备份',
     backupDue:'该备份了', lastBackup:'上次备份', neverBackup:'从未', backupNow:'立即备份', later:'稍后',
     backupSaved:'备份已保存',
-    backupHint:'点"存储到文件" → 选同一个文件夹（例如 iCloud 云盘）→ 存储 → 替换。新的备份会取代旧的。',
+    backupHint:'点"存储到文件" → 选文件夹（例如 iCloud 云盘 → Daily Ledger）→ 存储。每个备份会以当天日期命名，恢复时选最新的一个。',
     clearAll:'删除全部记录', confirmClear:'确定删除全部记录？此操作无法撤销。',
     confirmImport:'用此备份（{n} 笔）取代现有全部记录？',
     importOk:'已导入 {n} 笔记录', importBad:'这不是有效的备份文件。',
@@ -1037,7 +1037,7 @@ async function shareOrDownload(name, text, mime){
   try{
     const file = new File([blob], name, {type: mime});
     if (navigator.canShare && navigator.canShare({files:[file]})){
-      await navigator.share({files:[file], title:name});
+      await navigator.share({files:[file]});   // no title: iOS "Save to Files" would save it as an extra text.txt
       return true;
     }
   }catch(e){ if (e.name === 'AbortError') return false; }
@@ -1049,11 +1049,9 @@ async function shareOrDownload(name, text, mime){
 }
 
 /* ---------- weekly backup to Files ---------- */
-// Fixed file name so saving into the same Files folder offers "Replace" instead of piling up copies.
-const BACKUP_NAME = 'daily-ledger-backup.json';
 const BACKUP_EVERY = 7 * 864e5;
 async function backupNow(){
-  const ok = await shareOrDownload(BACKUP_NAME,
+  const ok = await shareOrDownload(`daily-ledger-backup-${todayStr()}.json`,
     JSON.stringify({app:'daily-ledger', version:1, exported:new Date().toISOString(), rates:S.rates, tx:S.tx}, null, 1),
     'application/json');
   if (!ok) return;
