@@ -30,7 +30,9 @@
   --bal:#e9c46a;
   --radius:18px;
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+/* touch-action:manipulation disables iOS double-tap zoom (and its tap delay) so rapid taps never zoom or shift the page */
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+html,body{overflow:hidden}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Helvetica Neue",Arial,sans-serif;
   overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-text-size-adjust:100%}
@@ -723,6 +725,7 @@ function closeSheet(){
   openSheetEl.classList.remove('show');
   $('#overlay').classList.remove('show');
   openSheetEl = null;
+  window.scrollTo(0, 0);   // undo any shift left behind by the iOS keyboard
 }
 
 /* ---------- add / edit ---------- */
