@@ -207,6 +207,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 .rate-row{display:flex;align-items:center;gap:10px;padding:9px 14px 9px 6px;border-bottom:1px solid var(--line);min-height:52px;
   position:relative;background:var(--panel2);transition:transform .18s ease}
 .rate-row.dragging{transition:none;z-index:2;background:#1f3a2e;box-shadow:0 8px 22px rgba(0,0,0,.45);border-radius:10px}
+.def-badge{font-style:normal;font-size:10px;font-weight:700;color:var(--accent-ink);background:var(--accent);
+  padding:2px 6px;border-radius:6px;margin-right:6px;vertical-align:1px}
 .grip{width:34px;height:34px;flex:none;display:grid;place-items:center;touch-action:none;cursor:grab}
 .grip svg{width:18px;height:18px;stroke:var(--muted);stroke-width:2;stroke-linecap:round;fill:none}
 .rate-row:last-child{border-bottom:0}
@@ -460,7 +462,8 @@ const I18N = {
     month:'Month', m6:'6 Months', year:'Year', custom:'Custom',
     totalExpense:'Total Expense', totalIncome:'Total Income', net:'Net',
     details:'Details', settings:'Settings', language:'Language', rates:'Exchange Rates',
-    reorderHint:'Drag ≡ to change the order of the currency list.', baseCur:'Default currency',
+    reorderHint:'Drag ≡ to change the order. The top currency is used for new records.', baseCur:'Totals shown in RM',
+    defaultBadge:'Default',
     ratesHint:'How many RM for 1 unit. Each record keeps the rate from the day you saved it, so old records never change.',
     updateRates:'Update live rates', updated:'Last updated', updating:'Updating…', never:'Using default rates',
     updateFail:'Could not fetch rates. Check your connection.', ratesOk:'Rates updated',
@@ -486,7 +489,8 @@ const I18N = {
     month:'月', m6:'近6个月', year:'年', custom:'自订',
     totalExpense:'总支出', totalIncome:'总收入', net:'结余',
     details:'明细', settings:'设置', language:'语言', rates:'汇率',
-    reorderHint:'拖动 ≡ 可调整货币列表的顺序。', baseCur:'默认货币',
+    reorderHint:'拖动 ≡ 调整顺序。最上面的货币会用于新记录。', baseCur:'总额以 RM 显示',
+    defaultBadge:'默认',
     ratesHint:'1 单位外币等于多少 RM。每笔记录会保存当时的汇率，旧记录不会改变。',
     updateRates:'更新实时汇率', updated:'最后更新', updating:'更新中…', never:'使用默认汇率',
     updateFail:'无法获取汇率，请检查网络。', ratesOk:'汇率已更新',
@@ -726,7 +730,7 @@ function openTx(tx){
   ui.editing = tx || null;
   ui.fType = tx ? tx.type : 'expense';
   ui.fCat = tx ? tx.category : null;
-  $('#fCur').value = tx ? tx.currency : 'MYR';
+  $('#fCur').value = tx ? tx.currency : S.curOrder[0];   // new records start with the top currency in Settings
   $('#fAmount').value = tx ? String(tx.amount) : '';
   $('#fRate').value = tx ? String(tx.rate) : String(rateOf('MYR'));
   $('#fNote').value = tx ? tx.note : '';
@@ -992,9 +996,10 @@ function bindRateDrag(){
 }
 function renderSettings(){
   const grip = '<span class="grip" aria-label="Drag to reorder"><svg viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg></span>';
-  $('#rateList').innerHTML = S.curOrder.map(c => c === 'MYR'
-    ? `<div class="rate-row" data-code="MYR">${grip}<span class="code">RM</span><span class="eq">${t('baseCur')}</span></div>`
-    : `<div class="rate-row" data-code="${c}">${grip}<span class="code">${CUR[c].label}</span><span class="eq">1 ${CUR[c].label} =</span>
+  const badge = i => i === 0 ? `<i class="def-badge">${t('defaultBadge')}</i>` : '';
+  $('#rateList').innerHTML = S.curOrder.map((c, i) => c === 'MYR'
+    ? `<div class="rate-row" data-code="MYR">${grip}<span class="code">RM</span><span class="eq">${badge(i)}${t('baseCur')}</span></div>`
+    : `<div class="rate-row" data-code="${c}">${grip}<span class="code">${CUR[c].label}</span><span class="eq">${badge(i)}1 ${CUR[c].label} =</span>
      <input data-cur="${c}" inputmode="decimal" value="${S.rates[c]}"><span style="color:var(--muted);font-size:13px">RM</span></div>`).join('');
   $('#ratesStamp').textContent = S.ratesUpdated
     ? t('updated') + ': ' + new Date(S.ratesUpdated).toLocaleString(S.lang === 'zh' ? 'zh-CN' : 'en-MY')
