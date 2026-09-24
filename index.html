@@ -214,6 +214,15 @@ button{font:inherit;color:inherit;cursor:pointer}
 .mp-grid button{padding:14px 0;border-radius:12px;border:1px solid var(--line);background:var(--panel2);font-weight:600}
 .mp-grid button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .mp-year{font-weight:700;font-size:18px}
+.bk-banner{display:flex;align-items:center;gap:12px;margin:0 0 12px;padding:12px 14px;border-radius:16px;
+  background:rgba(233,196,106,.12);border:1px solid rgba(233,196,106,.35);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.bk-banner svg{width:26px;height:26px;flex:none;fill:none;stroke:var(--bal);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.bk-banner .main{flex:1;min-width:0}
+.bk-banner b{display:block;font-size:14px}
+.bk-banner small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.bk-banner button{border:0;border-radius:10px;padding:8px 11px;font-size:13px;font-weight:700;white-space:nowrap}
+.bk-banner .go{background:var(--bal);color:#2b1f00}
+.bk-banner .no{background:none;color:var(--muted);padding:8px 4px}
 .toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translate(-50%,20px);z-index:40;
   background:rgba(20,40,31,.96);border:1px solid var(--line);padding:10px 16px;border-radius:12px;font-size:14px;
   opacity:0;pointer-events:none;transition:.25s;max-width:86%;text-align:center}
@@ -244,6 +253,7 @@ button{font:inherit;color:inherit;cursor:pointer}
     </div>
 
     <div class="list-wrap">
+      <div id="backupBanner"></div>
       <div class="day-head"><span id="dayLabel"></span><span id="dayNet"></span></div>
       <div class="card tx-list" id="txList" style="margin:0"></div>
     </div>
@@ -343,7 +353,9 @@ button{font:inherit;color:inherit;cursor:pointer}
     <p class="hint" id="ratesStamp"></p>
 
     <div class="label" data-i18n="backup">Backup</div>
-    <button class="btn" id="btnExport" data-i18n="exportJson">Export backup</button>
+    <button class="btn primary" id="btnExport" data-i18n="exportJson">Back up to Files</button>
+    <p class="hint" id="backupStamp"></p>
+    <p class="hint" data-i18n="backupHint"></p>
     <button class="btn" id="btnCsv" data-i18n="exportCsv">Export CSV</button>
     <button class="btn" id="btnImport" data-i18n="importJson">Import backup</button>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
@@ -442,7 +454,10 @@ const I18N = {
     ratesHint:'How many RM for 1 unit. Each record keeps the rate from the day you saved it, so old records never change.',
     updateRates:'Update live rates', updated:'Last updated', updating:'Updating…', never:'Using default rates',
     updateFail:'Could not fetch rates. Check your connection.', ratesOk:'Rates updated',
-    backup:'Backup', exportJson:'Export backup (JSON)', exportCsv:'Export CSV', importJson:'Import backup',
+    backup:'Backup', exportJson:'Back up to Files', exportCsv:'Export CSV', importJson:'Import backup',
+    backupDue:'Time to back up', lastBackup:'Last backup', neverBackup:'never', backupNow:'Back up now', later:'Later',
+    backupSaved:'Backup saved',
+    backupHint:'Tap Save to Files → choose the same folder (e.g. iCloud Drive) → Save → Replace. The old backup is replaced by the new one.',
     clearAll:'Delete all records', confirmClear:'Delete ALL records? This cannot be undone.',
     confirmImport:'Replace all current records with this backup ({n} records)?',
     importOk:'Imported {n} records', importBad:'This file is not a valid backup.',
@@ -450,7 +465,7 @@ const I18N = {
     category:'Category', note:'Note', notePh:'Optional', date:'Date', rate:'Rate',
     entries:'{n} entries', noData:'No records in this period', saved:'Saved', deleted:'Deleted',
     sortHigh:'Highest', sortLow:'Lowest', trend:'Trend', history:'Breakdown',
-    about:'Your data is stored only on this iPhone. Export a backup regularly (e.g. to iCloud Drive).',
+    about:'Your data is stored only on this iPhone. The app reminds you to back up to Files every week.',
     weekdays:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
     months:['January','February','March','April','May','June','July','August','September','October','November','December'],
     mshort:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -464,7 +479,10 @@ const I18N = {
     ratesHint:'1 单位外币等于多少 RM。每笔记录会保存当时的汇率，旧记录不会改变。',
     updateRates:'更新实时汇率', updated:'最后更新', updating:'更新中…', never:'使用默认汇率',
     updateFail:'无法获取汇率，请检查网络。', ratesOk:'汇率已更新',
-    backup:'备份', exportJson:'导出备份 (JSON)', exportCsv:'导出 CSV', importJson:'导入备份',
+    backup:'备份', exportJson:'备份到"文件"', exportCsv:'导出 CSV', importJson:'导入备份',
+    backupDue:'该备份了', lastBackup:'上次备份', neverBackup:'从未', backupNow:'立即备份', later:'稍后',
+    backupSaved:'备份已保存',
+    backupHint:'点"存储到文件" → 选同一个文件夹（例如 iCloud 云盘）→ 存储 → 替换。新的备份会取代旧的。',
     clearAll:'删除全部记录', confirmClear:'确定删除全部记录？此操作无法撤销。',
     confirmImport:'用此备份（{n} 笔）取代现有全部记录？',
     importOk:'已导入 {n} 笔记录', importBad:'这不是有效的备份文件。',
@@ -472,7 +490,7 @@ const I18N = {
     category:'类别', note:'备注', notePh:'可选', date:'日期', rate:'汇率',
     entries:'{n} 笔', noData:'这段期间没有记录', saved:'已保存', deleted:'已删除',
     sortHigh:'由高到低', sortLow:'由低到高', trend:'趋势', history:'分期明细',
-    about:'数据只保存在这台 iPhone 上，请定期导出备份（例如存到 iCloud 云盘）。',
+    about:'数据只保存在这台 iPhone 上。App 每周会提醒你备份到"文件"。',
     weekdays:['日','一','二','三','四','五','六'],
     months:['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'],
     mshort:['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
@@ -497,10 +515,11 @@ function load(){
     const d = JSON.parse(localStorage.getItem(STORE));
     if (d && Array.isArray(d.tx)) {
       return {lang: d.lang === 'zh' ? 'zh' : 'en', rates: {...DEFAULT_RATES, ...(d.rates||{})},
-              ratesUpdated: d.ratesUpdated || 0, tx: d.tx};
+              ratesUpdated: d.ratesUpdated || 0, tx: d.tx,
+              lastBackup: d.lastBackup || 0, backupBase: d.backupBase || Date.now(), backupSnooze: d.backupSnooze || 0};
     }
   }catch(e){}
-  return {lang:'en', rates:{...DEFAULT_RATES}, ratesUpdated:0, tx:[]};
+  return {lang:'en', rates:{...DEFAULT_RATES}, ratesUpdated:0, tx:[], lastBackup:0, backupBase:Date.now(), backupSnooze:0};
 }
 function save(){
   try{ localStorage.setItem(STORE, JSON.stringify(S)); }
@@ -648,6 +667,7 @@ function renderHome(){
   $('#dayNet').textContent = items.length ? t('entries', {n: items.length}) : '';
   $('#txList').innerHTML = items.length ? items.map(x => txRow(x)).join('')
     : `<div class="empty">${TREE_SVG}${t('noRecords')}<br>${t('tapAdd')}</div>`;
+  renderBackupBanner();
 }
 
 function txRow(x, withDate){
@@ -916,6 +936,7 @@ function renderSettings(){
   $('#ratesStamp').textContent = S.ratesUpdated
     ? t('updated') + ': ' + new Date(S.ratesUpdated).toLocaleString(S.lang === 'zh' ? 'zh-CN' : 'en-MY')
     : t('never');
+  $('#backupStamp').textContent = lastBackupText();
 }
 async function updateRates(silent){
   const btn = $('#btnRates');
@@ -938,24 +959,49 @@ async function updateRates(silent){
     renderSettings();
   }
 }
+// Returns true once the file was handed off (share sheet completed or download started), false if cancelled.
 async function shareOrDownload(name, text, mime){
   const blob = new Blob([text], {type: mime});
   try{
     const file = new File([blob], name, {type: mime});
     if (navigator.canShare && navigator.canShare({files:[file]})){
       await navigator.share({files:[file], title:name});
-      return;
+      return true;
     }
-  }catch(e){ if (e.name === 'AbortError') return; }
+  }catch(e){ if (e.name === 'AbortError') return false; }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return true;
 }
-function exportJson(){
-  shareOrDownload(`daily-ledger-backup-${todayStr()}.json`,
+
+/* ---------- weekly backup to Files ---------- */
+// Fixed file name so saving into the same Files folder offers "Replace" instead of piling up copies.
+const BACKUP_NAME = 'daily-ledger-backup.json';
+const BACKUP_EVERY = 7 * 864e5;
+async function backupNow(){
+  const ok = await shareOrDownload(BACKUP_NAME,
     JSON.stringify({app:'daily-ledger', version:1, exported:new Date().toISOString(), rates:S.rates, tx:S.tx}, null, 1),
     'application/json');
+  if (!ok) return;
+  S.lastBackup = Date.now(); S.backupSnooze = 0; save();
+  renderBackupBanner(); renderSettings(); toast(t('backupSaved'));
+}
+function lastBackupText(){
+  return t('lastBackup') + ': ' + (S.lastBackup
+    ? new Date(S.lastBackup).toLocaleDateString(S.lang === 'zh' ? 'zh-CN' : 'en-MY', {day:'numeric', month:'short', year:'numeric'})
+    : t('neverBackup'));
+}
+function renderBackupBanner(){
+  const now = Date.now();
+  const due = S.tx.length > 0 && now >= (S.lastBackup || S.backupBase) + BACKUP_EVERY && now >= S.backupSnooze;
+  $('#backupBanner').innerHTML = !due ? '' :
+    `<div class="bk-banner">
+      <svg viewBox="0 0 24 24"><path d="M7 18.5a4.5 4.5 0 0 1-.6-9 6 6 0 0 1 11.6 1.5 4 4 0 0 1-.5 7.5M12 12v8M9 17l3 3 3-3"/></svg>
+      <div class="main"><b>${t('backupDue')}</b><small>${esc(lastBackupText())}</small></div>
+      <button class="no" id="bkLater">${t('later')}</button><button class="go" id="bkNow">${t('backupNow')}</button>
+    </div>`;
 }
 function exportCsv(){
   const q = v => '"' + String(v).replace(/"/g,'""') + '"';
@@ -1075,7 +1121,11 @@ function bind(){
     if (v > 0){ S.rates[inp.dataset.cur] = v; save(); } else inp.value = S.rates[inp.dataset.cur];
   });
   $('#btnRates').onclick = () => updateRates(false);
-  $('#btnExport').onclick = exportJson;
+  $('#btnExport').onclick = backupNow;
+  $('#backupBanner').addEventListener('click', e => {
+    if (e.target.closest('#bkNow')) backupNow();
+    else if (e.target.closest('#bkLater')){ S.backupSnooze = Date.now() + 864e5; save(); renderBackupBanner(); }
+  });
   $('#btnCsv').onclick = exportCsv;
   $('#btnImport').onclick = () => $('#importFile').click();
   $('#importFile').onchange = e => { const f = e.target.files[0]; if (f) importJson(f); e.target.value = ''; };
@@ -1087,6 +1137,7 @@ function bind(){
   // refresh "today" when the app comes back to the foreground on a new day
   let lastDay = todayStr();
   document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') renderBackupBanner();
     if (document.visibilityState === 'visible' && todayStr() !== lastDay){
       lastDay = todayStr(); ui.sel = lastDay; const d = new Date(); ui.vy = d.getFullYear(); ui.vm = d.getMonth(); renderAll();
     }
