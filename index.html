@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -30,8 +30,8 @@
   --bal:#e9c46a;
   --radius:18px;
 }
-/* touch-action:manipulation disables iOS double-tap zoom (and its tap delay) so rapid taps never zoom or shift the page */
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+/* pan-x pan-y allows scrolling only: no double-tap zoom (and no tap delay), no pinch zoom */
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:pan-x pan-y}
 html,body{overflow:hidden}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Helvetica Neue",Arial,sans-serif;
@@ -1216,6 +1216,11 @@ function bind(){
     }
   });
 }
+
+// iOS ignores user-scalable=no, so block pinch-zoom directly (Safari gesture events + two-finger moves).
+['gesturestart', 'gesturechange', 'gestureend'].forEach(ev =>
+  document.addEventListener(ev, e => e.preventDefault(), {passive:false}));
+document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, {passive:false});
 
 /* ---------- boot ---------- */
 buildForest();
