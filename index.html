@@ -204,7 +204,11 @@ button{font:inherit;color:inherit;cursor:pointer}
 .btn{width:100%;padding:13px;border-radius:14px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-weight:600;font-size:15px;margin-top:8px;text-align:center}
 .btn.primary{background:rgba(143,214,166,.14);border-color:rgba(143,214,166,.4);color:var(--accent)}
 .hint{font-size:12px;color:var(--muted);margin:6px 4px 0;line-height:1.5}
-.rate-row{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line)}
+.rate-row{display:flex;align-items:center;gap:10px;padding:9px 14px 9px 6px;border-bottom:1px solid var(--line);min-height:52px;
+  position:relative;background:var(--panel2);transition:transform .18s ease}
+.rate-row.dragging{transition:none;z-index:2;background:#1f3a2e;box-shadow:0 8px 22px rgba(0,0,0,.45);border-radius:10px}
+.grip{width:34px;height:34px;flex:none;display:grid;place-items:center;touch-action:none;cursor:grab}
+.grip svg{width:18px;height:18px;stroke:var(--muted);stroke-width:2;stroke-linecap:round;fill:none}
 .rate-row:last-child{border-bottom:0}
 .rate-row .code{font-weight:700;width:46px}
 .rate-row .eq{flex:1;color:var(--muted);font-size:13px}
@@ -347,6 +351,7 @@ button{font:inherit;color:inherit;cursor:pointer}
     </div>
 
     <div class="label" data-i18n="rates">Exchange Rates</div>
+    <p class="hint" data-i18n="reorderHint" style="margin:-2px 4px 8px"></p>
     <div class="group" id="rateList"></div>
     <p class="hint" data-i18n="ratesHint"></p>
     <button class="btn primary" id="btnRates" data-i18n="updateRates">Update live rates</button>
@@ -377,11 +382,15 @@ const CUR = {
   SGD:{sym:'S$',  dec:2, label:'SGD'},
   CNY:{sym:'¥',   dec:2, label:'RMB'},
   HKD:{sym:'HK$', dec:2, label:'HKD'},
-  JPY:{sym:'JP¥', dec:0, label:'JPY'}
+  JPY:{sym:'JP¥', dec:0, label:'JPY'},
+  EUR:{sym:'€',   dec:2, label:'EUR'},
+  THB:{sym:'฿',   dec:2, label:'THB'},
+  VND:{sym:'₫',   dec:0, label:'VND'}
 };
-const CUR_ORDER = ['MYR','USD','GBP','SGD','CNY','HKD','JPY'];
+// Default order; the user can drag to reorder in Settings (saved as S.curOrder)
+const CUR_ORDER = ['MYR','USD','GBP','SGD','CNY','HKD','JPY','EUR','THB','VND'];
 // RM per 1 unit of foreign currency (fallback until live rates are fetched)
-const DEFAULT_RATES = {USD:4.20, GBP:5.60, SGD:3.25, CNY:0.59, HKD:0.54, JPY:0.029};
+const DEFAULT_RATES = {USD:4.20, GBP:5.60, SGD:3.25, CNY:0.59, HKD:0.54, JPY:0.029, EUR:4.75, THB:0.125, VND:0.00017};
 
 // Colours follow Apple's dark-mode system palette
 const CATS = {
@@ -451,6 +460,7 @@ const I18N = {
     month:'Month', m6:'6 Months', year:'Year', custom:'Custom',
     totalExpense:'Total Expense', totalIncome:'Total Income', net:'Net',
     details:'Details', settings:'Settings', language:'Language', rates:'Exchange Rates',
+    reorderHint:'Drag ≡ to change the order of the currency list.', baseCur:'Default currency',
     ratesHint:'How many RM for 1 unit. Each record keeps the rate from the day you saved it, so old records never change.',
     updateRates:'Update live rates', updated:'Last updated', updating:'Updating…', never:'Using default rates',
     updateFail:'Could not fetch rates. Check your connection.', ratesOk:'Rates updated',
@@ -476,6 +486,7 @@ const I18N = {
     month:'月', m6:'近6个月', year:'年', custom:'自订',
     totalExpense:'总支出', totalIncome:'总收入', net:'结余',
     details:'明细', settings:'设置', language:'语言', rates:'汇率',
+    reorderHint:'拖动 ≡ 可调整货币列表的顺序。', baseCur:'默认货币',
     ratesHint:'1 单位外币等于多少 RM。每笔记录会保存当时的汇率，旧记录不会改变。',
     updateRates:'更新实时汇率', updated:'最后更新', updating:'更新中…', never:'使用默认汇率',
     updateFail:'无法获取汇率，请检查网络。', ratesOk:'汇率已更新',
@@ -516,10 +527,18 @@ function load(){
     if (d && Array.isArray(d.tx)) {
       return {lang: d.lang === 'zh' ? 'zh' : 'en', rates: {...DEFAULT_RATES, ...(d.rates||{})},
               ratesUpdated: d.ratesUpdated || 0, tx: d.tx,
-              lastBackup: d.lastBackup || 0, backupBase: d.backupBase || Date.now(), backupSnooze: d.backupSnooze || 0};
+              lastBackup: d.lastBackup || 0, backupBase: d.backupBase || Date.now(), backupSnooze: d.backupSnooze || 0,
+              curOrder: normalizeOrder(d.curOrder), ratesLive: Array.isArray(d.ratesLive) ? d.ratesLive : []};
     }
   }catch(e){}
-  return {lang:'en', rates:{...DEFAULT_RATES}, ratesUpdated:0, tx:[], lastBackup:0, backupBase:Date.now(), backupSnooze:0};
+  return {lang:'en', rates:{...DEFAULT_RATES}, ratesUpdated:0, tx:[], lastBackup:0, backupBase:Date.now(), backupSnooze:0,
+          curOrder: [...CUR_ORDER], ratesLive: []};
+}
+// Keep the saved order, drop unknown codes, and append any currency added in a later version.
+function normalizeOrder(o){
+  const out = (Array.isArray(o) ? o : []).filter((c, i, a) => CUR[c] && a.indexOf(c) === i);
+  CUR_ORDER.forEach(c => { if (!out.includes(c)) out.push(c); });
+  return out;
 }
 function save(){
   try{ localStorage.setItem(STORE, JSON.stringify(S)); }
@@ -625,7 +644,7 @@ function applyLang(){
   $('#fNote').placeholder = t('notePh');
   $('#weekdays').innerHTML = I18N[S.lang].weekdays.map(w => `<span>${w}</span>`).join('');
   $$('#langSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === S.lang));
-  $('#fCur').innerHTML = CUR_ORDER.map(c => `<option value="${c}">${CUR[c].label}</option>`).join('');
+  renderCurOptions();
 }
 
 /* ---------- home ---------- */
@@ -929,9 +948,53 @@ function balanceView(list, a, b){
 }
 
 /* ---------- settings ---------- */
+// Currency picker in the add/edit sheet follows the user's order; keeps the current selection.
+function renderCurOptions(){
+  const sel = $('#fCur'), v = sel.value;
+  sel.innerHTML = S.curOrder.map(c => `<option value="${c}">${CUR[c].label}</option>`).join('');
+  if (v) sel.value = v;
+}
+// Drag the ≡ handle to reorder currencies (pointer events work for touch and mouse).
+function bindRateDrag(){
+  const list = $('#rateList');
+  list.addEventListener('pointerdown', e => {
+    const grip = e.target.closest('.grip'); if (!grip) return;
+    e.preventDefault();
+    const row = grip.closest('.rate-row'), rows = [...list.children];
+    const from = rows.indexOf(row), h = row.getBoundingClientRect().height, startY = e.clientY;
+    let to = from;
+    row.classList.add('dragging');
+    try{ grip.setPointerCapture(e.pointerId); }catch(err){}
+    const move = ev => {
+      const dy = ev.clientY - startY;
+      row.style.transform = `translateY(${dy}px)`;
+      to = Math.max(0, Math.min(rows.length - 1, from + Math.round(dy / h)));
+      rows.forEach((r, i) => {
+        if (r === row) return;
+        const shift = (from < to && i > from && i <= to) ? -h : (from > to && i < from && i >= to) ? h : 0;
+        r.style.transform = shift ? `translateY(${shift}px)` : '';
+      });
+    };
+    const up = () => {
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      grip.removeEventListener('pointercancel', up);
+      if (to !== from){
+        const o = [...S.curOrder]; const [c] = o.splice(from, 1); o.splice(to, 0, c);
+        S.curOrder = o; save(); renderCurOptions();
+      }
+      renderSettings();
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+    grip.addEventListener('pointercancel', up);
+  });
+}
 function renderSettings(){
-  $('#rateList').innerHTML = CUR_ORDER.filter(c => c !== 'MYR').map(c =>
-    `<div class="rate-row"><span class="code">${CUR[c].label}</span><span class="eq">1 ${CUR[c].label} =</span>
+  const grip = '<span class="grip" aria-label="Drag to reorder"><svg viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg></span>';
+  $('#rateList').innerHTML = S.curOrder.map(c => c === 'MYR'
+    ? `<div class="rate-row" data-code="MYR">${grip}<span class="code">RM</span><span class="eq">${t('baseCur')}</span></div>`
+    : `<div class="rate-row" data-code="${c}">${grip}<span class="code">${CUR[c].label}</span><span class="eq">1 ${CUR[c].label} =</span>
      <input data-cur="${c}" inputmode="decimal" value="${S.rates[c]}"><span style="color:var(--muted);font-size:13px">RM</span></div>`).join('');
   $('#ratesStamp').textContent = S.ratesUpdated
     ? t('updated') + ': ' + new Date(S.ratesUpdated).toLocaleString(S.lang === 'zh' ? 'zh-CN' : 'en-MY')
@@ -949,6 +1012,7 @@ async function updateRates(silent){
       if (c === 'MYR' || !j.rates[c]) continue;
       const v = 1 / j.rates[c];
       S.rates[c] = Number(v.toPrecision(v < 1 ? 4 : 5));
+      if (!S.ratesLive.includes(c)) S.ratesLive.push(c);
     }
     S.ratesUpdated = Date.now(); save();
     if (!silent) toast(t('ratesOk'));
@@ -1115,6 +1179,7 @@ function bind(){
     const b = e.target.closest('button'); if (!b) return;
     S.lang = b.dataset.v; save(); applyLang(); renderSettings(); renderAll();
   });
+  bindRateDrag();
   $('#rateList').addEventListener('change', e => {
     const inp = e.target.closest('input'); if (!inp) return;
     const v = parseNum(inp.value);
@@ -1150,7 +1215,9 @@ applyLang();
 bind();
 renderHome();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-if (navigator.onLine && Date.now() - S.ratesUpdated > 12*3600e3) updateRates(true);
+// Refresh twice a day, or straight away if a currency has never had a live rate (e.g. newly added ones)
+const missingLive = CUR_ORDER.some(c => c !== 'MYR' && !S.ratesLive.includes(c));
+if (navigator.onLine && (missingLive || Date.now() - S.ratesUpdated > 12*3600e3)) updateRates(true);
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
