@@ -1,5 +1,5 @@
 // Offline cache for the app shell. Bump VERSION after editing index.html so phones pick up the change.
-const VERSION = 'ledger-v1';
+const VERSION = 'ledger-v2';
 const SHELL = ['./', './index.html', './manifest.json', './icon-180.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

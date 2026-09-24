@@ -87,14 +87,18 @@ button{font:inherit;color:inherit;cursor:pointer}
   background:none;border-left:0;border-right:0;border-top:0;text-align:left}
 .tx:last-child{border-bottom:0}
 .tx:active{background:rgba(143,214,166,.06)}
-.cat-ic{width:40px;height:40px;flex:none;border-radius:12px;display:grid;place-items:center;font-size:20px;border:1px solid}
+/* Apple-style category tile: solid colour squircle, white line glyph */
+.cat-ic{width:40px;height:40px;flex:none;border-radius:11px;display:grid;place-items:center;color:#fff;
+  background:var(--c);background:linear-gradient(180deg,color-mix(in srgb,var(--c),#fff 14%),var(--c) 70%);
+  box-shadow:inset 0 .5px 0 rgba(255,255,255,.3),0 1px 3px rgba(0,0,0,.35)}
+.cat-ic svg{width:58%;height:58%;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .tx .main{flex:1;min-width:0}
 .tx .title{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tx .sub{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .amt{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:15px}
 .amt.expense{color:var(--exp)} .amt.income{color:var(--inc)}
 .empty{text-align:center;padding:34px 16px;color:var(--muted);font-size:14px}
-.empty .tree{font-size:40px;display:block;margin-bottom:8px;opacity:.85}
+.empty .tree{width:40px;height:40px;display:block;margin:0 auto 10px;fill:var(--accent);opacity:.55}
 
 .fab{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(22px + env(safe-area-inset-bottom));z-index:5;
   width:62px;height:62px;border-radius:50%;border:0;background:linear-gradient(150deg,#a9e6bd,#4f9d6c);
@@ -186,9 +190,13 @@ button{font:inherit;color:inherit;cursor:pointer}
 .label{font-size:13px;color:var(--muted);font-weight:600;margin:16px 4px 8px}
 .cat-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px 4px}
 .cat-btn{background:none;border:0;padding:4px 0;display:flex;flex-direction:column;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
-.cat-btn .cat-ic{width:46px;height:46px;font-size:22px;border-color:transparent !important;transition:transform .12s}
+.cat-btn .cat-ic{width:48px;height:48px;border-radius:13px;color:var(--c);
+  background:color-mix(in srgb,var(--c) 15%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 22%,transparent);
+  transition:transform .15s,background .15s,box-shadow .15s}
 .cat-btn.on{color:var(--text);font-weight:600}
-.cat-btn.on .cat-ic{border-color:currentColor !important;transform:scale(1.06);box-shadow:0 0 0 2px var(--accent)}
+.cat-btn.on .cat-ic{color:#fff;transform:scale(1.06);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--c),#fff 14%),var(--c) 70%);
+  box-shadow:inset 0 .5px 0 rgba(255,255,255,.3),0 6px 16px color-mix(in srgb,var(--c) 45%,transparent)}
 .field{display:flex;align-items:center;gap:12px;background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:4px 14px;margin-top:10px}
 .field span{color:var(--muted);font-size:14px;flex:none;min-width:44px}
 .field input,.field select{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--text);padding:10px 0;text-align:right}
@@ -363,35 +371,64 @@ const CUR_ORDER = ['MYR','USD','GBP','SGD','CNY','HKD','JPY'];
 // RM per 1 unit of foreign currency (fallback until live rates are fetched)
 const DEFAULT_RATES = {USD:4.20, GBP:5.60, SGD:3.25, CNY:0.59, HKD:0.54, JPY:0.029};
 
+// Colours follow Apple's dark-mode system palette
 const CATS = {
   expense:[
-    {id:'food',      e:'🍜', c:'#f0896b', en:'Food',          zh:'餐饮'},
-    {id:'drinks',    e:'🧋', c:'#d9a066', en:'Drinks',        zh:'饮品'},
-    {id:'groceries', e:'🛒', c:'#9bd46a', en:'Groceries',     zh:'买菜'},
-    {id:'transport', e:'🚗', c:'#6cc3e6', en:'Transport',     zh:'交通'},
-    {id:'fuel',      e:'⛽', c:'#5b8fd5', en:'Fuel',          zh:'油费'},
-    {id:'shopping',  e:'🛍️', c:'#e57bb0', en:'Shopping',      zh:'购物'},
-    {id:'bills',     e:'💡', c:'#e9c46a', en:'Bills',         zh:'账单'},
-    {id:'housing',   e:'🏠', c:'#c09070', en:'Housing',       zh:'住房'},
-    {id:'fun',       e:'🎮', c:'#a78bfa', en:'Entertainment', zh:'娱乐'},
-    {id:'health',    e:'💊', c:'#5fd0b5', en:'Health',        zh:'医疗'},
-    {id:'education', e:'📚', c:'#7aa2f7', en:'Education',     zh:'教育'},
-    {id:'travel',    e:'✈️', c:'#4fb3bf', en:'Travel',        zh:'旅行'},
-    {id:'social',    e:'🎉', c:'#f6a5c0', en:'Social',        zh:'社交'},
-    {id:'gifts',     e:'🎁', c:'#ef6f6c', en:'Gifts',         zh:'礼物'},
-    {id:'other',     e:'📦', c:'#9aa5a0', en:'Other',         zh:'其他'}
+    {id:'food',      c:'#FF9F0A', en:'Food',          zh:'餐饮'},
+    {id:'drinks',    c:'#AC8E68', en:'Drinks',        zh:'饮品'},
+    {id:'groceries', c:'#30D158', en:'Groceries',     zh:'买菜'},
+    {id:'transport', c:'#0A84FF', en:'Transport',     zh:'交通'},
+    {id:'fuel',      c:'#FF453A', en:'Fuel',          zh:'油费'},
+    {id:'shopping',  c:'#FF375F', en:'Shopping',      zh:'购物'},
+    {id:'bills',     c:'#EBB000', en:'Bills',         zh:'账单'},
+    {id:'housing',   c:'#5E5CE6', en:'Housing',       zh:'住房'},
+    {id:'fun',       c:'#BF5AF2', en:'Entertainment', zh:'娱乐'},
+    {id:'health',    c:'#40C8E0', en:'Health',        zh:'医疗'},
+    {id:'education', c:'#5AA9FA', en:'Education',     zh:'教育'},
+    {id:'travel',    c:'#00C7BE', en:'Travel',        zh:'旅行'},
+    {id:'social',    c:'#FF7A45', en:'Social',        zh:'社交'},
+    {id:'gifts',     c:'#DA4FA0', en:'Gifts',         zh:'礼物'},
+    {id:'other',     c:'#8E8E93', en:'Other',         zh:'其他'}
   ],
   income:[
-    {id:'salary',    e:'💼', c:'#6cc3e6', en:'Salary',        zh:'薪水'},
-    {id:'bonus',     e:'💰', c:'#e9c46a', en:'Bonus',         zh:'奖金'},
-    {id:'invest',    e:'📈', c:'#8fd6a6', en:'Investment',    zh:'投资'},
-    {id:'interest',  e:'🏦', c:'#7aa2f7', en:'Interest',      zh:'利息'},
-    {id:'side',      e:'🧰', c:'#d9a066', en:'Side Job',      zh:'副业'},
-    {id:'redpacket', e:'🧧', c:'#ef6f6c', en:'Red Packet',    zh:'红包'},
-    {id:'refund',    e:'↩️', c:'#a78bfa', en:'Refund',        zh:'退款'},
-    {id:'other_in',  e:'💵', c:'#9aa5a0', en:'Other',         zh:'其他'}
+    {id:'salary',    c:'#0A84FF', en:'Salary',        zh:'薪水'},
+    {id:'bonus',     c:'#EBB000', en:'Bonus',         zh:'奖金'},
+    {id:'invest',    c:'#30D158', en:'Investment',    zh:'投资'},
+    {id:'interest',  c:'#5E5CE6', en:'Interest',      zh:'利息'},
+    {id:'side',      c:'#FF9F0A', en:'Side Job',      zh:'副业'},
+    {id:'redpacket', c:'#FF453A', en:'Red Packet',    zh:'红包'},
+    {id:'refund',    c:'#BF5AF2', en:'Refund',        zh:'退款'},
+    {id:'other_in',  c:'#8E8E93', en:'Other',         zh:'其他'}
   ]
 };
+
+// SF Symbols–style line glyphs (24×24, drawn with stroke = currentColor)
+const GLYPHS = {
+  food:      '<path d="M6.5 3v5.5a2 2 0 0 0 4 0V3M8.5 3v18M16.5 21V3c-2 0-3.2 2.4-3.2 6.2 0 2.6 1.2 4.3 3.2 4.3"/>',
+  drinks:    '<path d="M5 8.5h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5zM16 10h1.3a2.5 2.5 0 0 1 0 5H16M4 21h13M8.5 3.5v2M12.5 3.5v2"/>',
+  groceries: '<path d="M3 4h2.3l2.2 10.5h10.2l2-7.5H6.2"/><circle cx="9" cy="19" r="1.4"/><circle cx="16.5" cy="19" r="1.4"/>',
+  transport: '<path d="M4 13.5l1.6-4.6A2 2 0 0 1 7.5 7.5h9a2 2 0 0 1 1.9 1.4l1.6 4.6M4 13.5h16V17a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM6.5 18v2M17.5 18v2"/><circle cx="7.5" cy="15.6" r=".6" fill="currentColor"/><circle cx="16.5" cy="15.6" r=".6" fill="currentColor"/>',
+  fuel:      '<path d="M5 21V5a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v16M3.5 21h12M5 10h9M14 8.5l3 3v6a1.5 1.5 0 0 0 3 0V9.5L17.5 7"/>',
+  shopping:  '<path d="M5 8h14l-1 12.2a1.5 1.5 0 0 1-1.5 1.3h-9A1.5 1.5 0 0 1 6 20.2zM9 10.5V7a3 3 0 0 1 6 0v3.5"/>',
+  bills:     '<path d="M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4-2 1.4zM9 8h6M9 12h6M9 16h3"/>',
+  housing:   '<path d="M3.5 11 12 4l8.5 7M5.5 9.5V20h13V9.5M10 20v-5.5h4V20"/>',
+  fun:       '<path d="M7 8h10a4 4 0 0 1 4 4.3l-.3 3.3a2.6 2.6 0 0 1-4.7 1.4L14.6 15H9.4L8 17a2.6 2.6 0 0 1-4.7-1.4L3 12.3A4 4 0 0 1 7 8zM7.5 10.5v3M6 12h3"/><circle cx="15.5" cy="11" r=".7" fill="currentColor"/><circle cx="17.3" cy="13" r=".7" fill="currentColor"/>',
+  health:    '<path d="M12 20s-7.5-4.4-7.5-10A4.3 4.3 0 0 1 12 7.3 4.3 4.3 0 0 1 19.5 10c0 5.6-7.5 10-7.5 10z"/><path d="M8 12h2l1-2 2 4 1-2h2"/>',
+  education: '<path d="M12 6.5C10.5 5 8 4.5 3.5 4.5v14c4.5 0 7 .5 8.5 2 1.5-1.5 4-2 8.5-2v-14c-4.5 0-7 .5-8.5 2zM12 6.5v14"/>',
+  travel:    '<path d="M12 2.5c.8 0 1.5.7 1.5 1.5v5l7.5 4.5v2l-7.5-2.3V18l2 1.5V21L12 20l-3.5 1v-1.5l2-1.5v-4.8L3 15.5v-2l7.5-4.5V4c0-.8.7-1.5 1.5-1.5z"/>',
+  social:    '<circle cx="9" cy="7.5" r="3.3"/><path d="M2.8 20c.5-3.4 3-5.4 6.2-5.4s5.7 2 6.2 5.4M15.8 4.3a3.2 3.2 0 0 1 0 6.3M17.6 14.8c2 .7 3.3 2.4 3.6 5.2"/>',
+  gifts:     '<path d="M4.5 11.5h15V20a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1zM3 7.5h18v4H3zM12 7.5V21M12 7.5C10.5 4.2 7 3.6 7 5.6S10 7.5 12 7.5zM12 7.5c1.5-3.3 5-3.9 5-1.9s-3 1.9-5 1.9z"/>',
+  other:     '<circle cx="12" cy="12" r="9"/><circle cx="8" cy="12" r=".8" fill="currentColor"/><circle cx="12" cy="12" r=".8" fill="currentColor"/><circle cx="16" cy="12" r=".8" fill="currentColor"/>',
+  salary:    '<path d="M3.5 8.5h17V19a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1zM8.5 8.5V6A1.5 1.5 0 0 1 10 4.5h4A1.5 1.5 0 0 1 15.5 6v2.5M3.5 13.5h17"/>',
+  bonus:     '<path d="M11 3l1.8 5 4.9 1.8-4.9 1.8L11 16.5l-1.8-4.9-4.9-1.8L9.2 8zM18 14.5l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8z"/>',
+  invest:    '<path d="M3.5 17.5 9 12l3.5 3.5 8-8M15 7.5h5.5V13"/>',
+  interest:  '<path d="M3 9.5 12 4l9 5.5M4.5 9.5h15M6.5 10v7.5M10.2 10v7.5M13.8 10v7.5M17.5 10v7.5M4.5 18h15M3.5 20.5h17"/>',
+  side:      '<path d="M5 5.5h14a1 1 0 0 1 1 1V16H4V6.5a1 1 0 0 1 1-1zM2.5 18.5h19"/>',
+  redpacket: '<path d="M5.5 3h13a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM4.5 8.5c2.3 2 4.8 3 7.5 3s5.2-1 7.5-3"/><circle cx="12" cy="11.5" r="2"/>',
+  refund:    '<path d="M9 14 4.5 9.5 9 5M4.5 9.5h10a5 5 0 0 1 0 10H11"/>',
+  other_in:  '<path d="M3 6.5h18v11H3z"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9.5v.01M18 14.5v.01"/>'
+};
+const TREE_SVG = '<svg class="tree" viewBox="0 0 24 24"><path d="M12 2.5 7 9h2.5L6 14h3l-3.5 5H11v2.5h2V19h5.5L15 14h3l-3.5-5H17z"/></svg>';
 const CAT_MAP = {};
 [...CATS.expense, ...CATS.income].forEach(c => CAT_MAP[c.id] = c);
 
@@ -507,8 +544,8 @@ function toast(msg){
   const el = $('#toast'); el.textContent = msg; el.classList.add('show');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
 }
-function catIcon(c, size){
-  return `<span class="cat-ic" style="background:${c.c}22;border-color:${c.c}55;color:${c.c}${size?';width:'+size+'px;height:'+size+'px':''}">${c.e}</span>`;
+function catIcon(c){
+  return `<span class="cat-ic" style="--c:${c.c}"><svg viewBox="0 0 24 24">${GLYPHS[c.id] || GLYPHS.other}</svg></span>`;
 }
 
 /* ---------- forest background ---------- */
@@ -529,8 +566,8 @@ function buildForest(){
     const x = rnd()*W, y = rnd()*H*0.55, r = rnd()*0.9 + 0.3;
     s += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}" fill="#dfeee4" opacity="${(rnd()*0.5+0.2).toFixed(2)}"/>`;
   }
-  s += `<circle cx="318" cy="120" r="95" fill="url(#glow)"/><circle cx="318" cy="120" r="24" fill="#e3edd2" opacity=".9"/>
-        <circle cx="309" cy="113" r="24" fill="#0a1812" opacity=".35"/>`;
+  s += `<circle cx="318" cy="455" r="95" fill="url(#glow)"/><circle cx="318" cy="455" r="22" fill="#e3edd2" opacity=".9"/>
+        <circle cx="310" cy="449" r="22" fill="#0a1812" opacity=".35"/>`;
   const pine = (x, base, h) => {
     const w = h*0.36, tiers = 5, R = [], L = [];
     for (let t = 1; t <= tiers; t++){
@@ -610,7 +647,7 @@ function renderHome(){
   $('#dayLabel').textContent = dayLabel(ui.sel);
   $('#dayNet').textContent = items.length ? t('entries', {n: items.length}) : '';
   $('#txList').innerHTML = items.length ? items.map(x => txRow(x)).join('')
-    : `<div class="empty"><span class="tree">🌲</span>${t('noRecords')}<br>${t('tapAdd')}</div>`;
+    : `<div class="empty">${TREE_SVG}${t('noRecords')}<br>${t('tapAdd')}</div>`;
 }
 
 function txRow(x, withDate){
@@ -766,7 +803,7 @@ function renderStats(){
   if (st.type === 'balance'){ body.innerHTML = balanceView(list, a, b); return; }
 
   const items = list.filter(x => x.type === st.type);
-  if (!items.length){ body.innerHTML = `<div class="card empty"><span class="tree">🌳</span>${t('noData')}</div>`; return; }
+  if (!items.length){ body.innerHTML = `<div class="card empty">${TREE_SVG}${t('noData')}</div>`; return; }
   const total = sum(items);
   const groups = {};
   for (const x of items){
@@ -822,7 +859,7 @@ function balanceView(list, a, b){
     <div class="tile"><small>${t('income')}</small><b class="c-inc">${fmt(inc)}</b></div>
     <div class="tile"><small>${t('expense')}</small><b class="c-exp">${fmt(exp)}</b></div>
     <div class="tile"><small>${t('balance')}</small><b class="c-bal">${fmtSigned(net)}</b></div></div><div class="gap"></div>`;
-  if (!list.length) return html + `<div class="card empty"><span class="tree">🌳</span>${t('noData')}</div>`;
+  if (!list.length) return html + `<div class="card empty">${TREE_SVG}${t('noData')}</div>`;
 
   // buckets: days for short ranges, months otherwise
   const days = Math.round((b - a) / 864e5) + 1;
