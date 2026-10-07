@@ -1155,7 +1155,14 @@ function importJson(file){
     try{ localStorage.setItem(STORE + '.preImport', JSON.stringify(S.tx)); }
     catch(e){ toast(t('storageError', {msg: e.message})); return; }
     S.tx = tx;
-    if (d.rates) S.rates = {...S.rates, ...d.rates};
+    // Merge only valid rates (known non-RM currency, positive finite number); skip bad entries instead of
+    // failing the import, and never overwrite a rate the user locked by hand. Imported rates are not marked manual.
+    if (d.rates && typeof d.rates === 'object' && !Array.isArray(d.rates)){
+      for (const [c, v] of Object.entries(d.rates)){
+        if (c !== 'MYR' && Object.prototype.hasOwnProperty.call(CUR, c) && typeof v === 'number' && isFinite(v) && v > 0
+            && !S.ratesManual.includes(c)) S.rates[c] = v;
+      }
+    }
     save(); renderAll(); renderSettings(); toast(t('importOk', {n: tx.length}));
   };
   reader.readAsText(file);
