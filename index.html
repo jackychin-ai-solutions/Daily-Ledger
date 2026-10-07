@@ -476,7 +476,7 @@ const I18N = {
     backupSaved:'Backup saved',
     downloadCheck:'Tried to download. Please check the file was saved.', csvSaved:'CSV exported',
     loadCorrupt:'Could not read your saved data. The original data was kept as a separate copy.',
-    storageError:'Could not save: {msg}',
+    storageError:'Could not save: {msg}', tinyAmount:'Amount too small; recorded as RM 0.01',
     backupHint:'Tap Save to Files → choose a folder (e.g. iCloud Drive → Daily Ledger) → Save. Each backup is named with today\'s date; to restore, pick the newest one.',
     clearAll:'Delete all records', confirmClear:'Delete ALL records? This cannot be undone.',
     confirmImport:'Replace all current records with this backup ({n} records)?',
@@ -507,7 +507,7 @@ const I18N = {
     backupSaved:'备份已保存',
     downloadCheck:'已尝试下载，请确认文件已保存。', csvSaved:'CSV 已导出',
     loadCorrupt:'数据读取失败，原始数据已另存。',
-    storageError:'保存失败：{msg}',
+    storageError:'保存失败：{msg}', tinyAmount:'金额太小，已按 RM 0.01 记录',
     backupHint:'点"存储到文件" → 选文件夹（例如 iCloud 云盘 → Daily Ledger）→ 存储。每个备份会以当天日期命名，恢复时选最新的一个。',
     clearAll:'删除全部记录', confirmClear:'确定删除全部记录？此操作无法撤销。',
     confirmImport:'用此备份（{n} 笔）取代现有全部记录？',
@@ -571,7 +571,7 @@ function normalizeOrder(o){
 }
 function save(){
   try{ localStorage.setItem(STORE, JSON.stringify(S)); }
-  catch(e){ toast('Storage error: ' + e.message); }
+  catch(e){ toast(t('storageError', {msg: e.message})); }
 }
 
 /* ---------- helpers ---------- */
@@ -758,7 +758,7 @@ function openTx(tx){
   ui.fCat = tx ? tx.category : null;
   $('#fCur').value = tx ? tx.currency : S.curOrder[0];   // new records start with the top currency in Settings
   $('#fAmount').value = tx ? String(tx.amount) : '';
-  $('#fRate').value = tx ? String(tx.rate) : String(rateOf('MYR'));
+  if (tx) $('#fRate').value = String(tx.rate);
   $('#fNote').value = tx ? tx.note : '';
   $('#fDate').value = tx ? tx.date : ui.sel;
   $('#fDelete').style.display = tx ? '' : 'none';
@@ -788,15 +788,17 @@ function saveTx(){
   const amount = parseNum($('#fAmount').value);
   const cur = $('#fCur').value;
   const rate = cur === 'MYR' ? 1 : parseNum($('#fRate').value);
-  if (!(amount > 0) || !(rate > 0)){
+  if (!(round2(amount) > 0) || !(rate > 0)){   // round2: an amount that rounds to 0 would fail backup import
     const row = $('#amountRow'); row.classList.remove('shake'); void row.offsetWidth; row.classList.add('shake');
     return;
   }
   const date = $('#fDate').value || ui.sel;
+  // Tiny foreign amounts (e.g. VND 10) would round to RM 0.00; record at least RM 0.01.
+  const tiny = round2(amount * rate) === 0;
   const rec = {
     id: ui.editing ? ui.editing.id : Date.now().toString(36) + Math.random().toString(36).slice(2,6),
     type: ui.fType, amount: round2(amount), currency: cur, rate,
-    myr: round2(amount * rate), category: ui.fCat,
+    myr: tiny ? 0.01 : round2(amount * rate), category: ui.fCat,
     note: $('#fNote').value.trim(), date,
     created: ui.editing ? ui.editing.created : Date.now()
   };
@@ -805,7 +807,7 @@ function saveTx(){
   save();
   ui.sel = date;
   const d = parseYmd(date); ui.vy = d.getFullYear(); ui.vm = d.getMonth();
-  closeSheet(); renderAll(); toast(t('saved'));
+  closeSheet(); renderAll(); toast(t(tiny ? 'tinyAmount' : 'saved'));
 }
 function deleteTx(){
   if (!ui.editing || !confirm(t('confirmDelete'))) return;
@@ -872,8 +874,9 @@ function renderStats(){
   if (st.type === 'balance'){ body.innerHTML = balanceView(list, a, b); return; }
 
   const items = list.filter(x => x.type === st.type);
-  if (!items.length){ body.innerHTML = `<div class="card empty">${TREE_SVG}${t('noData')}</div>`; return; }
   const total = sum(items);
+  // total can be 0 (e.g. only old RM 0.00 records): treat as no data so the donut never divides by 0
+  if (!items.length || total <= 0){ body.innerHTML = `<div class="card empty">${TREE_SVG}${t('noData')}</div>`; return; }
   const groups = {};
   for (const x of items){
     const g = groups[x.category] ||= {cat: CAT_MAP[x.category] || CAT_MAP.other, v:0, txs:[]};
@@ -881,7 +884,7 @@ function renderStats(){
   }
   const arr = Object.values(groups).sort((p, q) => q.v - p.v);
   const pct = v => total ? (v/total*100) : 0;
-  const pctTxt = v => { const p = pct(v); return (p >= 10 ? p.toFixed(1) : p.toFixed(1)) + '%'; };
+  const pctTxt = v => pct(v).toFixed(1) + '%';
 
   // donut
   const r = 64, C = 2*Math.PI*r;
@@ -1108,12 +1111,14 @@ function renderBackupBanner(){
 }
 async function exportCsv(){
   const q = v => '"' + String(v).replace(/"/g,'""') + '"';
+  // Stop spreadsheets treating text like "=1+1" as a formula; number columns are left as they are.
+  const safe = v => typeof v === 'string' && /^[=+\-@\t\r]/.test(v) ? "'" + v : v;
   const rows = [['Date','Type','Category','Note','Amount','Currency','Rate','Amount (RM)']];
   [...S.tx].sort((a,b) => a.date.localeCompare(b.date)).forEach(x => {
     const c = CAT_MAP[x.category];
     rows.push([x.date, x.type, c ? c.en : x.category, x.note, x.amount, CUR[x.currency].label, x.rate, x.myr]);
   });
-  const res = await shareOrDownload(`daily-ledger-${todayStr()}.csv`, '﻿' + rows.map(r => r.map(q).join(',')).join('\n'), 'text/csv');
+  const res = await shareOrDownload(`daily-ledger-${todayStr()}.csv`, '﻿' + rows.map(r => r.map(v => q(safe(v))).join(',')).join('\n'), 'text/csv');
   if (res === 'download') toast(t('downloadCheck'));
   else if (res === true) toast(t('csvSaved'));
 }
