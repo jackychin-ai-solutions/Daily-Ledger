@@ -472,6 +472,9 @@ const I18N = {
     backup:'Backup', exportJson:'Back up to Files', exportCsv:'Export CSV', importJson:'Import backup',
     backupDue:'Time to back up', lastBackup:'Last backup', neverBackup:'never', backupNow:'Back up now', later:'Later',
     backupSaved:'Backup saved',
+    downloadCheck:'Tried to download. Please check the file was saved.', csvSaved:'CSV exported',
+    loadCorrupt:'Could not read your saved data. The original data was kept as a separate copy.',
+    storageError:'Could not save: {msg}',
     backupHint:'Tap Save to Files → choose a folder (e.g. iCloud Drive → Daily Ledger) → Save. Each backup is named with today\'s date; to restore, pick the newest one.',
     clearAll:'Delete all records', confirmClear:'Delete ALL records? This cannot be undone.',
     confirmImport:'Replace all current records with this backup ({n} records)?',
@@ -499,6 +502,9 @@ const I18N = {
     backup:'备份', exportJson:'备份到"文件"', exportCsv:'导出 CSV', importJson:'导入备份',
     backupDue:'该备份了', lastBackup:'上次备份', neverBackup:'从未', backupNow:'立即备份', later:'稍后',
     backupSaved:'备份已保存',
+    downloadCheck:'已尝试下载，请确认文件已保存。', csvSaved:'CSV 已导出',
+    loadCorrupt:'数据读取失败，原始数据已另存。',
+    storageError:'保存失败：{msg}',
     backupHint:'点"存储到文件" → 选文件夹（例如 iCloud 云盘 → Daily Ledger）→ 存储。每个备份会以当天日期命名，恢复时选最新的一个。',
     clearAll:'删除全部记录', confirmClear:'确定删除全部记录？此操作无法撤销。',
     confirmImport:'用此备份（{n} 笔）取代现有全部记录？',
@@ -517,6 +523,7 @@ const I18N = {
 /* ---------- state ---------- */
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
+let loadCorrupt = false;   // set by load() when saved data could not be read; a toast is shown after boot
 let S = load();
 const todayStr = () => ymd(new Date());
 const ui = {
@@ -528,8 +535,10 @@ const ui = {
 };
 
 function load(){
+  let raw = null;
+  try{ raw = localStorage.getItem(STORE); }catch(e){}
   try{
-    const d = JSON.parse(localStorage.getItem(STORE));
+    const d = JSON.parse(raw);
     if (d && Array.isArray(d.tx)) {
       return {lang: d.lang === 'zh' ? 'zh' : 'en', rates: {...DEFAULT_RATES, ...(d.rates||{})},
               ratesUpdated: d.ratesUpdated || 0, tx: d.tx,
@@ -537,8 +546,18 @@ function load(){
               curOrder: normalizeOrder(d.curOrder), ratesLive: Array.isArray(d.ratesLive) ? d.ratesLive : []};
     }
   }catch(e){}
+  if (raw !== null) stashCorrupt(raw);   // data exists but is unreadable: keep a copy before the next save() overwrites it
   return {lang:'en', rates:{...DEFAULT_RATES}, ratesUpdated:0, tx:[], lastBackup:0, backupBase:Date.now(), backupSnooze:0,
           curOrder: [...CUR_ORDER], ratesLive: []};
+}
+// Never overwrite an earlier corrupt copy: add a timestamp suffix if one already exists.
+function stashCorrupt(raw){
+  try{
+    let key = STORE + '.corrupt';
+    if (localStorage.getItem(key) !== null) key += '.' + Date.now();
+    localStorage.setItem(key, raw);
+  }catch(e){}
+  loadCorrupt = true;
 }
 // Keep the saved order, drop unknown codes, and append any currency added in a later version.
 function normalizeOrder(o){
@@ -701,7 +720,7 @@ function txRow(x, withDate){
   if (withDate) parts.push(shortDate(x.date));
   parts.push(catName(c));
   if (x.currency !== 'MYR') parts.push(`${fmt(x.amount, x.currency)} @ ${x.rate}`);
-  return `<button class="tx" data-id="${x.id}">${catIcon(c)}
+  return `<button class="tx" data-id="${esc(x.id)}">${catIcon(c)}
     <div class="main"><div class="title">${esc(x.note || catName(c))}</div><div class="sub">${esc(parts.join(' · '))}</div></div>
     <div class="amt ${x.type}">${x.type === 'expense' ? '-' : '+'}${fmt(x.myr)}</div></button>`;
 }
@@ -1031,7 +1050,9 @@ async function updateRates(silent){
     renderSettings();
   }
 }
-// Returns true once the file was handed off (share sheet completed or download started), false if cancelled.
+// Returns true when the file was saved for sure, 'download' when we could only try a download link
+// (unconfirmed — on an iPhone home-screen app this often does nothing), or false if the user cancelled.
+// A download counts as saved only on a mouse/trackpad device; touch devices (pointer: coarse) can't confirm it.
 async function shareOrDownload(name, text, mime){
   const blob = new Blob([text], {type: mime});
   try{
@@ -1045,16 +1066,17 @@ async function shareOrDownload(name, text, mime){
   const a = document.createElement('a'); a.href = url; a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
-  return true;
+  return matchMedia('(pointer: coarse)').matches ? 'download' : true;
 }
 
 /* ---------- weekly backup to Files ---------- */
 const BACKUP_EVERY = 7 * 864e5;
 async function backupNow(){
-  const ok = await shareOrDownload(`daily-ledger-backup-${todayStr()}.json`,
+  const res = await shareOrDownload(`daily-ledger-backup-${todayStr()}.json`,
     JSON.stringify({app:'daily-ledger', version:1, exported:new Date().toISOString(), rates:S.rates, tx:S.tx}, null, 1),
     'application/json');
-  if (!ok) return;
+  if (res === 'download'){ toast(t('downloadCheck')); return; }   // unconfirmed: keep the weekly reminder
+  if (res !== true) return;
   S.lastBackup = Date.now(); S.backupSnooze = 0; save();
   renderBackupBanner(); renderSettings(); toast(t('backupSaved'));
 }
@@ -1073,28 +1095,52 @@ function renderBackupBanner(){
       <button class="no" id="bkLater">${t('later')}</button><button class="go" id="bkNow">${t('backupNow')}</button>
     </div>`;
 }
-function exportCsv(){
+async function exportCsv(){
   const q = v => '"' + String(v).replace(/"/g,'""') + '"';
   const rows = [['Date','Type','Category','Note','Amount','Currency','Rate','Amount (RM)']];
   [...S.tx].sort((a,b) => a.date.localeCompare(b.date)).forEach(x => {
     const c = CAT_MAP[x.category];
     rows.push([x.date, x.type, c ? c.en : x.category, x.note, x.amount, CUR[x.currency].label, x.rate, x.myr]);
   });
-  shareOrDownload(`daily-ledger-${todayStr()}.csv`, '﻿' + rows.map(r => r.map(q).join(',')).join('\n'), 'text/csv');
+  const res = await shareOrDownload(`daily-ledger-${todayStr()}.csv`, '﻿' + rows.map(r => r.map(q).join(',')).join('\n'), 'text/csv');
+  if (res === 'download') toast(t('downloadCheck'));
+  else if (res === true) toast(t('csvSaved'));
+}
+// Validate one imported record and return a clean copy, or null if it is invalid.
+// Legacy MYR records without amount/rate get amount = myr and rate = 1, as before.
+function cleanImportTx(x){
+  if (!x || typeof x !== 'object') return null;
+  if (typeof x.id !== 'string' || !x.id) return null;
+  if (typeof x.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(x.date) || ymd(parseYmd(x.date)) !== x.date) return null;
+  if (x.type !== 'expense' && x.type !== 'income') return null;
+  const currency = x.currency ?? 'MYR';
+  if (!Object.prototype.hasOwnProperty.call(CUR, currency)) return null;
+  const num = v => typeof v === 'number' && isFinite(v);
+  const myr = x.myr;
+  const amount = x.amount ?? (currency === 'MYR' ? myr : undefined);
+  const rate = x.rate ?? (currency === 'MYR' ? 1 : undefined);
+  if (!num(myr) || myr < 0 || !num(amount) || amount <= 0 || !num(rate) || rate <= 0) return null;
+  if (x.category !== undefined && typeof x.category !== 'string') return null;
+  const fallback = x.type === 'income' ? 'other_in' : 'other';
+  const category = CATS[x.type].some(c => c.id === x.category) ? x.category : fallback;
+  return {id: x.id, type: x.type, amount, currency, rate, myr, category,
+          note: String(x.note ?? '').slice(0, 60), date: x.date, created: num(x.created) ? x.created : 0};
 }
 function importJson(file){
   const reader = new FileReader();
   reader.onload = () => {
-    try{
-      const d = JSON.parse(reader.result);
-      const tx = Array.isArray(d) ? d : d.tx;
-      const ok = Array.isArray(tx) && tx.every(x => x && x.id && x.date && (x.type === 'expense' || x.type === 'income') && isFinite(x.myr));
-      if (!ok) throw 0;
-      if (!confirm(t('confirmImport', {n: tx.length}))) return;
-      S.tx = tx.map(x => ({currency:'MYR', rate:1, note:'', created:0, amount:x.myr, category: x.type === 'income' ? 'other_in' : 'other', ...x}));
-      if (d.rates) S.rates = {...S.rates, ...d.rates};
-      save(); renderAll(); renderSettings(); toast(t('importOk', {n: tx.length}));
-    }catch(e){ toast(t('importBad')); }
+    let d;
+    try{ d = JSON.parse(reader.result); }catch(e){ toast(t('importBad')); return; }
+    const list = Array.isArray(d) ? d : (d && d.tx);
+    const tx = Array.isArray(list) ? list.map(cleanImportTx) : null;
+    if (!tx || tx.some(x => !x)){ toast(t('importBad')); return; }   // reject the whole file; current data untouched
+    if (!confirm(t('confirmImport', {n: tx.length}))) return;
+    // Keep the current records (latest import only) so a bad import can be undone by hand.
+    try{ localStorage.setItem(STORE + '.preImport', JSON.stringify(S.tx)); }
+    catch(e){ toast(t('storageError', {msg: e.message})); return; }
+    S.tx = tx;
+    if (d.rates) S.rates = {...S.rates, ...d.rates};
+    save(); renderAll(); renderSettings(); toast(t('importOk', {n: tx.length}));
   };
   reader.readAsText(file);
 }
@@ -1225,6 +1271,7 @@ buildForest();
 applyLang();
 bind();
 renderHome();
+if (loadCorrupt) toast(t('loadCorrupt'));
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 // Refresh twice a day, or straight away if a currency has never had a live rate (e.g. newly added ones)
 const missingLive = CUR_ORDER.some(c => c !== 'MYR' && !S.ratesLive.includes(c));
