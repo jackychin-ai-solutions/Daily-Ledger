@@ -216,6 +216,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .rate-row:last-child{border-bottom:0}
 .rate-row .code{font-weight:700;width:46px}
 .rate-row .eq{flex:1;color:var(--muted);font-size:13px}
+.rate-reset{display:block;background:none;border:0;padding:3px 0 0;color:var(--accent);font-size:11px;font-weight:600;text-align:left}
 .rate-row input{width:104px;background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:6px 8px;text-align:right}
 .group{background:var(--panel2);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .mp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:6px 16px 22px}
@@ -469,6 +470,7 @@ const I18N = {
     ratesHint:'How many RM for 1 unit. Each record keeps the rate from the day you saved it, so old records never change.',
     updateRates:'Update live rates', updated:'Last updated', updating:'Updating…', never:'Using default rates',
     updateFail:'Could not fetch rates. Check your connection.', ratesOk:'Rates updated',
+    rateReset:'Reset to live',
     backup:'Backup', exportJson:'Back up to Files', exportCsv:'Export CSV', importJson:'Import backup',
     backupDue:'Time to back up', lastBackup:'Last backup', neverBackup:'never', backupNow:'Back up now', later:'Later',
     backupSaved:'Backup saved',
@@ -499,6 +501,7 @@ const I18N = {
     ratesHint:'1 单位外币等于多少 RM。每笔记录会保存当时的汇率，旧记录不会改变。',
     updateRates:'更新实时汇率', updated:'最后更新', updating:'更新中…', never:'使用默认汇率',
     updateFail:'无法获取汇率，请检查网络。', ratesOk:'汇率已更新',
+    rateReset:'恢复实时',
     backup:'备份', exportJson:'备份到"文件"', exportCsv:'导出 CSV', importJson:'导入备份',
     backupDue:'该备份了', lastBackup:'上次备份', neverBackup:'从未', backupNow:'立即备份', later:'稍后',
     backupSaved:'备份已保存',
@@ -543,12 +546,13 @@ function load(){
       return {lang: d.lang === 'zh' ? 'zh' : 'en', rates: {...DEFAULT_RATES, ...(d.rates||{})},
               ratesUpdated: d.ratesUpdated || 0, tx: d.tx,
               lastBackup: d.lastBackup || 0, backupBase: d.backupBase || Date.now(), backupSnooze: d.backupSnooze || 0,
-              curOrder: normalizeOrder(d.curOrder), ratesLive: Array.isArray(d.ratesLive) ? d.ratesLive : []};
+              curOrder: normalizeOrder(d.curOrder), ratesLive: Array.isArray(d.ratesLive) ? d.ratesLive : [],
+              ratesManual: Array.isArray(d.ratesManual) ? d.ratesManual.filter(c => c !== 'MYR' && CUR[c]) : []};
     }
   }catch(e){}
   if (raw !== null) stashCorrupt(raw);   // data exists but is unreadable: keep a copy before the next save() overwrites it
   return {lang:'en', rates:{...DEFAULT_RATES}, ratesUpdated:0, tx:[], lastBackup:0, backupBase:Date.now(), backupSnooze:0,
-          curOrder: [...CUR_ORDER], ratesLive: []};
+          curOrder: [...CUR_ORDER], ratesLive: [], ratesManual: []};
 }
 // Never overwrite an earlier corrupt copy: add a timestamp suffix if one already exists.
 function stashCorrupt(raw){
@@ -1021,12 +1025,17 @@ function renderSettings(){
   const badge = i => i === 0 ? `<i class="def-badge">${t('defaultBadge')}</i>` : '';
   $('#rateList').innerHTML = S.curOrder.map((c, i) => c === 'MYR'
     ? `<div class="rate-row" data-code="MYR">${grip}<span class="code">RM</span><span class="eq">${badge(i)}${t('baseCur')}</span></div>`
-    : `<div class="rate-row" data-code="${c}">${grip}<span class="code">${CUR[c].label}</span><span class="eq">${badge(i)}1 ${CUR[c].label} =</span>
+    : `<div class="rate-row" data-code="${c}">${grip}<span class="code">${CUR[c].label}</span><span class="eq">${badge(i)}1 ${CUR[c].label} =${S.ratesManual.includes(c) ? resetLink(c) : ''}</span>
      <input data-cur="${c}" inputmode="decimal" value="${S.rates[c]}"><span style="color:var(--muted);font-size:13px">RM</span></div>`).join('');
-  $('#ratesStamp').textContent = S.ratesUpdated
+  $('#ratesStamp').textContent = ratesStampText();
+  $('#backupStamp').textContent = lastBackupText();
+}
+// Shown under a currency whose rate the user typed in; tapping it goes back to live rates.
+const resetLink = c => `<button class="rate-reset" data-reset="${c}">${t('rateReset')}</button>`;
+function ratesStampText(){
+  return S.ratesUpdated
     ? t('updated') + ': ' + new Date(S.ratesUpdated).toLocaleString(S.lang === 'zh' ? 'zh-CN' : 'en-MY')
     : t('never');
-  $('#backupStamp').textContent = lastBackupText();
 }
 async function updateRates(silent){
   const btn = $('#btnRates');
@@ -1036,7 +1045,7 @@ async function updateRates(silent){
     const j = await res.json();
     if (j.result !== 'success' || !j.rates) throw new Error('bad response');
     for (const c of CUR_ORDER){
-      if (c === 'MYR' || !j.rates[c]) continue;
+      if (c === 'MYR' || !j.rates[c] || S.ratesManual.includes(c)) continue;   // keep rates the user typed in
       const v = 1 / j.rates[c];
       S.rates[c] = Number(v.toPrecision(v < 1 ? 4 : 5));
       if (!S.ratesLive.includes(c)) S.ratesLive.push(c);
@@ -1047,7 +1056,9 @@ async function updateRates(silent){
     if (!silent) toast(t('updateFail'));
   }finally{
     if (!silent){ btn.textContent = t('updateRates'); btn.disabled = false; }
-    renderSettings();
+    // Don't redraw the rate inputs while the user is typing in one; just refresh the timestamp.
+    if ($('#rateList').contains(document.activeElement)) $('#ratesStamp').textContent = ratesStampText();
+    else renderSettings();
   }
 }
 // Returns true when the file was saved for sure, 'download' when we could only try a download link
@@ -1234,8 +1245,21 @@ function bind(){
   bindRateDrag();
   $('#rateList').addEventListener('change', e => {
     const inp = e.target.closest('input'); if (!inp) return;
-    const v = parseNum(inp.value);
-    if (v > 0){ S.rates[inp.dataset.cur] = v; save(); } else inp.value = S.rates[inp.dataset.cur];
+    const c = inp.dataset.cur, v = parseNum(inp.value);
+    if (!(v > 0)){ inp.value = S.rates[c]; return; }
+    S.rates[c] = v;
+    if (!S.ratesManual.includes(c)){
+      S.ratesManual.push(c);
+      // add the reset link in place (a full redraw would steal focus if the user moved to the next input)
+      inp.closest('.rate-row').querySelector('.eq').insertAdjacentHTML('beforeend', resetLink(c));
+    }
+    save();
+  });
+  $('#rateList').addEventListener('click', e => {
+    const b = e.target.closest('.rate-reset'); if (!b) return;
+    S.ratesManual = S.ratesManual.filter(c => c !== b.dataset.reset);
+    save(); renderSettings();
+    updateRates(false);   // fetch the live rate for it straight away
   });
   $('#btnRates').onclick = () => updateRates(false);
   $('#btnExport').onclick = backupNow;
@@ -1254,7 +1278,10 @@ function bind(){
   // refresh "today" when the app comes back to the foreground on a new day
   let lastDay = todayStr();
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') renderBackupBanner();
+    if (document.visibilityState === 'visible'){
+      renderBackupBanner();
+      if (navigator.onLine && Date.now() - S.ratesUpdated > 12*3600e3) updateRates(true);
+    }
     if (document.visibilityState === 'visible' && todayStr() !== lastDay){
       lastDay = todayStr(); ui.sel = lastDay; const d = new Date(); ui.vy = d.getFullYear(); ui.vm = d.getMonth(); renderAll();
     }
@@ -1274,7 +1301,7 @@ renderHome();
 if (loadCorrupt) toast(t('loadCorrupt'));
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 // Refresh twice a day, or straight away if a currency has never had a live rate (e.g. newly added ones)
-const missingLive = CUR_ORDER.some(c => c !== 'MYR' && !S.ratesLive.includes(c));
+const missingLive = CUR_ORDER.some(c => c !== 'MYR' && !S.ratesLive.includes(c) && !S.ratesManual.includes(c));
 if (navigator.onLine && (missingLive || Date.now() - S.ratesUpdated > 12*3600e3)) updateRates(true);
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
