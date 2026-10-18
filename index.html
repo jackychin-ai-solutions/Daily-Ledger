@@ -1523,9 +1523,11 @@ async function shareOrDownload(name, text, mime){
 
 /* ---------- weekly backup to Files ---------- */
 const BACKUP_EVERY = 7 * 864e5;
+const catConfig = () => ({catCustom: S.catCustom, catOrder: S.catOrder, catHidden: S.catHidden, catNames: S.catNames});
 async function backupNow(){
+  // "cats" is an added field (version stays 1): older app versions simply ignore it
   const res = await shareOrDownload(`daily-ledger-backup-${todayStr()}.json`,
-    JSON.stringify({app:'daily-ledger', version:1, exported:new Date().toISOString(), rates:S.rates, tx:S.tx}, null, 1),
+    JSON.stringify({app:'daily-ledger', version:1, exported:new Date().toISOString(), rates:S.rates, cats:catConfig(), tx:S.tx}, null, 1),
     'application/json');
   if (res === 'download'){ toast(t('downloadCheck')); return; }   // unconfirmed: keep the weekly reminder
   if (res !== true) return;
@@ -1554,7 +1556,9 @@ async function exportCsv(){
   const rows = [['Date','Type','Category','Note','Amount','Currency','Rate','Amount (RM)']];
   [...S.tx].sort((a,b) => a.date.localeCompare(b.date)).forEach(x => {
     const c = CAT_MAP[x.category];
-    rows.push([x.date, x.type, c ? c.en : x.category, x.note, x.amount, CUR[x.currency].label, x.rate, x.myr]);
+    // custom: its name; built-in: the rename if any, else English; unknown id: the raw id, as before
+    const cat = !c ? x.category : c.builtin ? (S.catNames[c.id] || c.en) : c.name;
+    rows.push([x.date, x.type, cat, x.note, x.amount, CUR[x.currency].label, x.rate, x.myr]);
   });
   const res = await shareOrDownload(`daily-ledger-${todayStr()}.csv`, '﻿' + rows.map(r => r.map(v => q(safe(v))).join(',')).join('\n'), 'text/csv');
   if (res === 'download') toast(t('downloadCheck'));
@@ -1562,7 +1566,9 @@ async function exportCsv(){
 }
 // Validate one imported record and return a clean copy, or null if it is invalid.
 // Legacy MYR records without amount/rate get amount = myr and rate = 1, as before.
-function cleanImportTx(x){
+// knownType maps every acceptable category id to its type; an unknown id, or one of the other
+// type, falls back to "Other".
+function cleanImportTx(x, knownType = BUILTIN_TYPE){
   if (!x || typeof x !== 'object') return null;
   if (typeof x.id !== 'string' || !x.id) return null;
   if (typeof x.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(x.date) || ymd(parseYmd(x.date)) !== x.date) return null;
@@ -1575,8 +1581,9 @@ function cleanImportTx(x){
   const rate = x.rate ?? (currency === 'MYR' ? 1 : undefined);
   if (!num(myr) || myr < 0 || !num(amount) || amount <= 0 || !num(rate) || rate <= 0) return null;
   if (x.category !== undefined && typeof x.category !== 'string') return null;
-  const fallback = x.type === 'income' ? 'other_in' : 'other';
-  const category = CATS[x.type].some(c => c.id === x.category) ? x.category : fallback;
+  const fallback = FALLBACK_CAT[x.type];
+  const category = typeof x.category === 'string' && hasOwn(knownType, x.category) && knownType[x.category] === x.type
+    ? x.category : fallback;
   return {id: x.id, type: x.type, amount, currency, rate, myr, category,
           note: String(x.note ?? '').slice(0, 60), date: x.date, created: num(x.created) ? x.created : 0};
 }
@@ -1586,13 +1593,27 @@ function importJson(file){
     let d;
     try{ d = JSON.parse(reader.result); }catch(e){ toast(t('importBad')); return; }
     const list = Array.isArray(d) ? d : (d && d.tx);
-    const tx = Array.isArray(list) ? list.map(cleanImportTx) : null;
+    // The backup's category setup, validated item by item (bad entries dropped); null for older backups.
+    const cats = d && !Array.isArray(d) && d.cats && typeof d.cats === 'object' && !Array.isArray(d.cats)
+      ? normalizeCatConfig(d.cats) : null;
+    // Category ids a record may use: built-ins ∪ the backup's custom ∪ the current custom ones.
+    const knownType = {...BUILTIN_TYPE};
+    [...S.catCustom, ...(cats ? cats.catCustom : [])].forEach(c => knownType[c.id] = c.type);
+    const tx = Array.isArray(list) ? list.map(x => cleanImportTx(x, knownType)) : null;
     if (!tx || tx.some(x => !x)){ toast(t('importBad')); return; }   // reject the whole file; current data untouched
     if (!confirm(t('confirmImport', {n: tx.length}))) return;
-    // Keep the current records (latest import only) so a bad import can be undone by hand.
-    try{ localStorage.setItem(STORE + '.preImport', JSON.stringify(S.tx)); }
+    // Keep the current records and category setup (latest import only) so a bad import can be undone by hand.
+    try{ localStorage.setItem(STORE + '.preImport', JSON.stringify({tx: S.tx, cats: catConfig()})); }
     catch(e){ toast(t('storageError', {msg: e.message})); return; }
     S.tx = tx;
+    if (cats){
+      // The backup's setup replaces the current one. Current custom categories that imported records
+      // still use but the backup lacks are kept too, so no record is left pointing at a missing category.
+      const inBackup = new Set(cats.catCustom.map(c => c.id)), used = new Set(tx.map(x => x.category));
+      const carry = S.catCustom.filter(c => !inBackup.has(c.id) && used.has(c.id));
+      Object.assign(S, normalizeCatConfig({...cats, catCustom: [...cats.catCustom, ...carry]}));
+    }   // older backup without "cats": keep the current category setup
+    rebuildCatMap();
     // Merge only valid rates (known non-RM currency, positive finite number); skip bad entries instead of
     // failing the import, and never overwrite a rate the user locked by hand. Imported rates are not marked manual.
     if (d.rates && typeof d.rates === 'object' && !Array.isArray(d.rates)){
