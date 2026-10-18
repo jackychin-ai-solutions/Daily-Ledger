@@ -55,6 +55,9 @@ button{font:inherit;color:inherit;cursor:pointer}
   background:rgba(143,214,166,.08);font-weight:600;font-size:13px}
 .month-title{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
   font-size:19px;font-weight:700;background:none;border:0;padding:6px 0;letter-spacing:.2px}
+#home .top{gap:8px}   /* five header items: slightly tighter spacing so the month title keeps its room */
+#home .month-title{min-width:0}   /* lets fitMonthLabel() detect overflow instead of the header overflowing */
+.month-title span{white-space:nowrap}
 .month-title .caret{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid var(--accent)}
 
 /* cards */
@@ -165,6 +168,27 @@ button{font:inherit;color:inherit;cursor:pointer}
 .bucket .nums{text-align:right;font-variant-numeric:tabular-nums}
 .bucket .nums small{display:block;font-size:11px;color:var(--muted)}
 
+/* search */
+.search-box{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:38px;padding:0 12px;border-radius:12px;
+  border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.search-box svg{width:18px;height:18px;flex:none;stroke:var(--muted);fill:none;stroke-width:2;stroke-linecap:round}
+.search-box input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--text);padding:0;font-size:16px;
+  -webkit-appearance:none;appearance:none}
+.s-filters{margin:0;padding:12px}
+.s-row{display:flex;align-items:center;gap:8px;margin-top:10px}
+.s-row > span{color:var(--muted);font-size:14px;flex:none;min-width:52px}
+.s-row > i{font-style:normal;color:var(--muted);flex:none}
+.s-row input,.s-row select{flex:1;min-width:0;width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+  color:var(--text);padding:7px 8px;font-size:16px}
+.s-cat-toggle{display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:10px;padding:10px 12px;
+  border-radius:10px;border:1px solid var(--line);background:var(--panel2);font-size:14px;color:var(--muted)}
+.s-cat-toggle b{color:var(--text);font-weight:600}
+#sCats .label{margin:14px 4px 8px}
+#sCats .cat-btn{min-width:0}
+#sCats .cat-btn span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sClear{margin-top:12px}
+#sMore{margin-top:12px}
+
 /* sheets */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:20;opacity:0;pointer-events:none;transition:opacity .25s}
 .overlay.show{opacity:1;pointer-events:auto}
@@ -250,6 +274,9 @@ button{font:inherit;color:inherit;cursor:pointer}
       </button>
       <button class="pill" id="btnToday" data-i18n="today">Today</button>
       <button class="month-title" id="btnMonth"><span id="monthLabel"></span><i class="caret"></i></button>
+      <button class="icon-btn" id="btnSearch" aria-label="Search">
+        <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8"/></svg>
+      </button>
       <button class="icon-btn" id="btnStats" aria-label="Statistics">
         <svg viewBox="0 0 24 24"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>
       </button>
@@ -296,6 +323,36 @@ button{font:inherit;color:inherit;cursor:pointer}
       <input type="date" id="pFrom"><span>–</span><input type="date" id="pTo">
     </div>
     <div class="scroll" id="statsBody"></div>
+  </section>
+
+  <!-- SEARCH -->
+  <section class="view" id="search">
+    <header class="top">
+      <button class="icon-btn" id="btnSearchBack" aria-label="Back">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <label class="search-box">
+        <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8"/></svg>
+        <input type="search" id="sQuery" enterkeyhint="search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false">
+      </label>
+    </header>
+    <div class="scroll" id="searchBody">
+      <div class="card s-filters">
+        <div class="seg" id="sType" style="width:100%;display:grid;grid-template-columns:repeat(3,1fr)">
+          <button data-v="all" data-i18n="all">All</button>
+          <button data-v="expense" data-i18n="expense">Expense</button>
+          <button data-v="income" data-i18n="income">Income</button>
+        </div>
+        <div class="s-row"><span data-i18n="date">Date</span><input type="date" id="sFrom"><i>–</i><input type="date" id="sTo"></div>
+        <div class="s-row"><span data-i18n="amountRm">Amount (RM)</span><input id="sMin" inputmode="decimal" autocomplete="off"><i>–</i><input id="sMax" inputmode="decimal" autocomplete="off"></div>
+        <div class="s-row"><span data-i18n="currency">Currency</span><select id="sCur"></select></div>
+        <button class="s-cat-toggle" id="sCatToggle"></button>
+        <div id="sCats"></div>
+        <button class="btn" id="sClear" data-i18n="clearFilters">Clear filters</button>
+      </div>
+      <div class="gap"></div>
+      <div id="searchResults"></div>
+    </div>
   </section>
 
   <button class="fab" id="fab" aria-label="Add">
@@ -457,6 +514,10 @@ const GLYPHS = {
 const TREE_SVG = '<svg class="tree" viewBox="0 0 24 24"><path d="M12 2.5 7 9h2.5L6 14h3l-3.5 5H11v2.5h2V19h5.5L15 14h3l-3.5-5H17z"/></svg>';
 const CAT_MAP = {};
 [...CATS.expense, ...CATS.income].forEach(c => CAT_MAP[c.id] = c);
+// Single entry point for category lists in new code (categories are planned to become user-editable).
+const catsFor = type => CATS[type];
+// A record's category; unknown ids (e.g. old data) fall back to that type's last category ("Other").
+function catOf(x){ const list = catsFor(x.type); return CAT_MAP[x.category] || list[list.length - 1]; }
 
 const I18N = {
   en:{
@@ -485,6 +546,9 @@ const I18N = {
     category:'Category', note:'Note', notePh:'Optional', date:'Date', rate:'Rate',
     entries:'{n} entries', noData:'No records in this period', saved:'Saved', deleted:'Deleted',
     sortHigh:'Highest', sortLow:'Lowest', trend:'Trend', history:'Breakdown',
+    searchPh:'Search notes or categories', all:'All', currency:'Currency', amountRm:'Amount (RM)',
+    min:'Min', max:'Max', catAny:'Any', catSelected:'{n} selected', clearFilters:'Clear filters',
+    searchHint:'Type a keyword or set a filter', noMatch:'No matching records', showMore:'Show more ({n} left)',
     about:'Your data is stored only on this iPhone. The app reminds you to back up to Files every week.',
     weekdays:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
     months:['January','February','March','April','May','June','July','August','September','October','November','December'],
@@ -516,6 +580,9 @@ const I18N = {
     category:'类别', note:'备注', notePh:'可选', date:'日期', rate:'汇率',
     entries:'{n} 笔', noData:'这段期间没有记录', saved:'已保存', deleted:'已删除',
     sortHigh:'由高到低', sortLow:'由低到高', trend:'趋势', history:'分期明细',
+    searchPh:'搜索备注或分类', all:'全部', currency:'币种', amountRm:'金额 (RM)',
+    min:'最低', max:'最高', catAny:'不限', catSelected:'已选 {n} 个', clearFilters:'清除筛选',
+    searchHint:'输入关键字或设置筛选条件', noMatch:'没有符合条件的记录', showMore:'显示更多（还有 {n} 笔）',
     about:'数据只保存在这台 iPhone 上。App 每周会提醒你备份到"文件"。',
     weekdays:['日','一','二','三','四','五','六'],
     months:['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'],
@@ -534,8 +601,12 @@ const ui = {
   vy: new Date().getFullYear(), vm: new Date().getMonth(),
   mpYear: 0,
   editing: null, fType: 'expense', fCat: null,
-  st: {type:'expense', period:'month', ay:0, am:0, from:'', to:'', asc:false, open:new Set()}
+  st: {type:'expense', period:'month', ay:0, am:0, from:'', to:'', asc:false, open:new Set()},
+  search: newSearch()   // search filters live in memory only (kept while the app is open, never saved)
 };
+function newSearch(){
+  return {q:'', type:'all', cats:new Set(), from:'', to:'', min:'', max:'', cur:'all', limit:100, catsOpen:false};
+}
 
 function load(){
   let raw = null;
@@ -604,6 +675,10 @@ function shortDate(s){
   const d = parseYmd(s);
   return S.lang === 'zh' ? `${d.getMonth()+1}月${d.getDate()}日` : `${d.getDate()} ${I18N.en.mshort[d.getMonth()]}`;
 }
+function fullDate(s){
+  const d = parseYmd(s);
+  return S.lang === 'zh' ? `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日` : `${d.getDate()} ${I18N.en.mshort[d.getMonth()]} ${d.getFullYear()}`;
+}
 function parseNum(v){ const n = parseFloat(String(v).replace(/,/g,'').trim()); return isFinite(n) ? n : NaN; }
 function rateOf(cur){ return cur === 'MYR' ? 1 : (S.rates[cur] || DEFAULT_RATES[cur]); }
 let toastTimer;
@@ -671,14 +746,23 @@ function applyLang(){
   document.documentElement.lang = S.lang === 'zh' ? 'zh-Hans' : 'en';
   $$('[data-i18n]').forEach(el => el.textContent = t(el.dataset.i18n));
   $('#fNote').placeholder = t('notePh');
+  $('#sQuery').placeholder = t('searchPh');
+  $('#sMin').placeholder = t('min'); $('#sMax').placeholder = t('max');
   $('#weekdays').innerHTML = I18N[S.lang].weekdays.map(w => `<span>${w}</span>`).join('');
   $$('#langSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === S.lang));
   renderCurOptions();
 }
 
 /* ---------- home ---------- */
+// With five header buttons a long English month ("September 2026") doesn't fit a 375–390px phone:
+// use the short month name only when the full one would overflow.
+function fitMonthLabel(){
+  const btn = $('#btnMonth'), label = $('#monthLabel');
+  label.textContent = monthLabel(ui.vy, ui.vm);
+  if (S.lang === 'en' && btn.scrollWidth > btn.clientWidth) label.textContent = `${I18N.en.mshort[ui.vm]} ${ui.vy}`;
+}
 function renderHome(){
-  $('#monthLabel').textContent = monthLabel(ui.vy, ui.vm);
+  fitMonthLabel();
   const first = new Date(ui.vy, ui.vm, 1);
   const start = new Date(ui.vy, ui.vm, 1 - first.getDay());
   const dim = new Date(ui.vy, ui.vm + 1, 0).getDate();
@@ -718,10 +802,11 @@ function renderHome(){
   renderBackupBanner();
 }
 
+// withDate: true = short date ("5 Oct"), 'full' = with year (search results can span years)
 function txRow(x, withDate){
-  const c = CAT_MAP[x.category] || CATS[x.type][CATS[x.type].length-1];
+  const c = catOf(x);
   const parts = [];
-  if (withDate) parts.push(shortDate(x.date));
+  if (withDate) parts.push(withDate === 'full' ? fullDate(x.date) : shortDate(x.date));
   parts.push(catName(c));
   if (x.currency !== 'MYR') parts.push(`${fmt(x.amount, x.currency)} @ ${x.rate}`);
   return `<button class="tx" data-id="${esc(x.id)}">${catIcon(c)}
@@ -980,6 +1065,82 @@ function balanceView(list, a, b){
   return html;
 }
 
+/* ---------- search ---------- */
+const SEARCH_PAGE = 100;   // results rendered per "Show more"
+// Normalised filters: date range and amount range swapped if reversed (like the stats custom range).
+function searchCriteria(){
+  const s = ui.search;
+  let from = s.from, to = s.to;
+  if (from && to && from > to) [from, to] = [to, from];
+  let min = parseNum(s.min), max = parseNum(s.max);
+  if (isFinite(min) && isFinite(max) && min > max) [min, max] = [max, min];
+  return {terms: s.q.toLowerCase().split(/\s+/).filter(Boolean), type: s.type, cats: s.cats,
+          from, to, min, max, cur: s.cur};
+}
+function hasCriteria(c){
+  return c.terms.length > 0 || c.type !== 'all' || c.cats.size > 0 || !!c.from || !!c.to
+    || isFinite(c.min) || isFinite(c.max) || c.cur !== 'all';
+}
+// All conditions are combined with AND. Keywords match the note and the category name in both languages.
+function searchMatches(c){
+  return S.tx.filter(x => {
+    if (c.type !== 'all' && x.type !== c.type) return false;
+    const cat = catOf(x);
+    if (c.cats.size && !c.cats.has(cat.id)) return false;
+    if (c.from && x.date < c.from) return false;
+    if (c.to && x.date > c.to) return false;
+    if (isFinite(c.min) && x.myr < c.min) return false;
+    if (isFinite(c.max) && x.myr > c.max) return false;
+    if (c.cur !== 'all' && x.currency !== c.cur) return false;
+    if (c.terms.length){
+      const hay = (String(x.note || '') + ' ' + cat.en + ' ' + cat.zh).toLowerCase();
+      if (!c.terms.every(w => hay.includes(w))) return false;
+    }
+    return true;
+  });
+}
+function openSearch(){
+  const s = ui.search;
+  $('#home').classList.remove('active'); $('#search').classList.add('active');
+  $('#sQuery').value = s.q; $('#sFrom').value = s.from; $('#sTo').value = s.to;
+  $('#sMin').value = s.min; $('#sMax').value = s.max;
+  renderSearch();
+}
+// Filter controls (not the text inputs, so typing never loses focus) + results.
+function renderSearch(){
+  const s = ui.search;
+  $$('#sType button').forEach(b => b.classList.toggle('on', b.dataset.v === s.type));
+  $('#sCur').innerHTML = `<option value="all">${t('all')}</option>` +
+    S.curOrder.map(c => `<option value="${c}">${CUR[c].label}</option>`).join('');
+  $('#sCur').value = s.cur;
+  $('#sCatToggle').innerHTML = `<span>${t('category')}</span><b>${s.cats.size ? t('catSelected', {n: s.cats.size}) : t('catAny')} ${s.catsOpen ? '▴' : '▾'}</b>`;
+  const types = s.type === 'all' ? ['expense', 'income'] : [s.type];
+  $('#sCats').innerHTML = !s.catsOpen ? '' : types.map(ty =>
+    `<div class="label">${t(ty)}</div><div class="cat-grid">${catsFor(ty).map(c =>
+      `<button class="cat-btn ${s.cats.has(c.id) ? 'on' : ''}" data-c="${c.id}">${catIcon(c)}<span>${catName(c)}</span></button>`).join('')}</div>`).join('');
+  renderSearchResults();
+}
+function renderSearchResults(){
+  const s = ui.search, c = searchCriteria(), box = $('#searchResults');
+  if (!hasCriteria(c)){ box.innerHTML = `<div class="card empty">${TREE_SVG}${t('searchHint')}</div>`; return; }
+  const list = searchMatches(c).sort((a, b) => b.date.localeCompare(a.date) || b.created - a.created);
+  if (!list.length){ box.innerHTML = `<div class="card empty">${TREE_SVG}${t('noMatch')}</div>`; return; }
+  // totals always cover every match, not only the rows rendered so far
+  const exp = sum(list.filter(x => x.type === 'expense')), inc = sum(list.filter(x => x.type === 'income'));
+  const cells = [];
+  if (c.type !== 'income') cells.push(`<span>${t('expense')}<b class="c-exp">${fmt(exp)}</b></span>`);
+  if (c.type !== 'expense') cells.push(`<span>${t('income')}<b class="c-inc">${fmt(inc)}</b></span>`);
+  if (c.type === 'all') cells.push(`<span>${t('balance')}<b class="c-bal">${fmtSigned(round2(inc - exp))}</b></span>`);
+  const shown = list.slice(0, s.limit), left = list.length - shown.length;
+  box.innerHTML =
+    `<div class="card" style="margin:0 0 12px"><div class="day-head" style="padding:12px 14px 0"><span id="sCount">${t('entries', {n: list.length})}</span></div>
+      <div class="summary" style="border-top:0;grid-template-columns:repeat(${cells.length},1fr)">${cells.join('')}</div></div>
+    <div class="card tx-list" style="margin:0">${shown.map(x => txRow(x, 'full')).join('')}</div>` +
+    (left > 0 ? `<button class="btn" id="sMore">${t('showMore', {n: left})}</button>` : '');
+}
+// Any filter change starts again from the first page of results.
+function searchChanged(){ ui.search.limit = SEARCH_PAGE; renderSearchResults(); }
+
 /* ---------- settings ---------- */
 // Currency picker in the add/edit sheet follows the user's order; keeps the current selection.
 function renderCurOptions(){
@@ -1172,6 +1333,7 @@ function importJson(file){
 function renderAll(){
   renderHome();
   if ($('#stats').classList.contains('active')) renderStats();
+  if ($('#search').classList.contains('active')) renderSearchResults();   // e.g. after editing a result
 }
 function bind(){
   $('#days').addEventListener('click', e => {
@@ -1247,6 +1409,38 @@ function bind(){
     if (row){ const id = row.dataset.cat; ui.st.open.has(id) ? ui.st.open.delete(id) : ui.st.open.add(id); renderStats(); return; }
     openById(e);
   });
+
+  // search
+  $('#btnSearch').onclick = openSearch;
+  $('#btnSearchBack').onclick = () => { $('#search').classList.remove('active'); $('#home').classList.add('active'); renderHome(); };
+  let sTimer;   // ~150 ms debounce for typed filters
+  const typed = (key, el) => el.addEventListener('input', () => {
+    ui.search[key] = el.value; clearTimeout(sTimer); sTimer = setTimeout(searchChanged, 150);
+  });
+  typed('q', $('#sQuery')); typed('min', $('#sMin')); typed('max', $('#sMax'));
+  $('#sQuery').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });   // hide the keyboard
+  $('#sFrom').onchange = e => { ui.search.from = e.target.value; searchChanged(); };
+  $('#sTo').onchange = e => { ui.search.to = e.target.value; searchChanged(); };
+  $('#sCur').onchange = e => { ui.search.cur = e.target.value; searchChanged(); };
+  $('#sType').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const s = ui.search; s.type = b.dataset.v;
+    // drop selected categories that the chosen type no longer shows
+    if (s.type !== 'all'){ const ids = new Set(catsFor(s.type).map(c => c.id)); s.cats = new Set([...s.cats].filter(id => ids.has(id))); }
+    s.limit = SEARCH_PAGE; renderSearch();
+  });
+  $('#sCatToggle').onclick = () => { ui.search.catsOpen = !ui.search.catsOpen; renderSearch(); };
+  $('#sCats').addEventListener('click', e => {
+    const b = e.target.closest('.cat-btn'); if (!b) return;
+    const cats = ui.search.cats; cats.has(b.dataset.c) ? cats.delete(b.dataset.c) : cats.add(b.dataset.c);
+    ui.search.limit = SEARCH_PAGE; renderSearch();
+  });
+  $('#sClear').onclick = () => { ui.search = newSearch(); openSearch(); };
+  $('#searchResults').addEventListener('click', e => {
+    if (e.target.closest('#sMore')){ ui.search.limit += SEARCH_PAGE; renderSearchResults(); return; }
+    openById(e);
+  });
+  window.addEventListener('resize', () => { if ($('#home').classList.contains('active')) fitMonthLabel(); });
 
   // settings
   $('#btnSettings').onclick = () => { renderSettings(); openSheet('#setSheet'); };
