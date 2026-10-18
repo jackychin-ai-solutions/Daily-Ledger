@@ -187,6 +187,23 @@ button{font:inherit;color:inherit;cursor:pointer}
 #sCats .cat-btn{min-width:0}
 #sCats .cat-btn span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sClear{margin-top:12px}
+.s-hidden{font-size:10px;color:var(--dim);margin-top:-3px}
+
+/* category manager (reuses .group / .rate-row / .cat-btn / .def-badge) */
+.cm-row{cursor:pointer}
+.cm-row .cat-ic{width:32px;height:32px;border-radius:9px}
+.cm-name{flex:1;min-width:0;font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cm-row.is-hidden .cat-ic,.cm-row.is-hidden .cm-name{opacity:.45}
+.def-badge.cm-tag{background:var(--dim);color:var(--text)}
+.cm-chev{color:var(--muted);font-size:18px;padding-right:4px}
+#catAdd{margin-top:12px}
+.ce-top{display:flex;align-items:center;gap:12px}
+.ce-top .cat-ic{width:52px;height:52px;border-radius:14px}
+#ceRestore{margin:8px 4px 0}
+#ceIcons .cat-btn .cat-ic{width:44px;height:44px}
+.cat-btn.swatch .cat-ic{background:var(--c);box-shadow:none}   /* .cat-btn.* : beats the tinted .cat-btn .cat-ic rule below */
+.cat-btn.swatch.on .cat-ic{background:var(--c);box-shadow:0 0 0 2px var(--sheet),0 0 0 4px var(--text)}
+#ceHide{margin-top:16px}
 #sMore{margin-top:12px}
 
 /* sheets */
@@ -412,6 +429,9 @@ button{font:inherit;color:inherit;cursor:pointer}
       <button data-v="en">English</button><button data-v="zh">中文</button>
     </div>
 
+    <div class="label" data-i18n="categories">Categories</div>
+    <button class="btn" id="btnCats" data-i18n="manageCats">Manage categories</button>
+
     <div class="label" data-i18n="rates">Exchange Rates</div>
     <p class="hint" data-i18n="reorderHint" style="margin:-2px 4px 8px"></p>
     <div class="group" id="rateList"></div>
@@ -428,6 +448,47 @@ button{font:inherit;color:inherit;cursor:pointer}
     <input type="file" id="importFile" accept="application/json,.json" hidden>
     <p class="hint" data-i18n="about"></p>
     <button class="danger" id="btnClear" data-i18n="clearAll">Delete all records</button>
+  </div>
+</div>
+
+<!-- CATEGORY MANAGER (opened from Settings) -->
+<div class="sheet" id="catSheet">
+  <div class="sheet-head">
+    <button class="link" id="catBack">‹ <span data-i18n="settings">Settings</span></button>
+    <h3 data-i18n="categories">Categories</h3>
+    <button class="link strong" data-close data-i18n="done">Done</button>
+  </div>
+  <div class="sheet-body">
+    <div class="seg" id="cmType" style="width:100%;display:grid;grid-template-columns:1fr 1fr">
+      <button data-v="expense" data-i18n="expense">Expense</button><button data-v="income" data-i18n="income">Income</button>
+    </div>
+    <p class="hint" data-i18n="catsHint" style="margin:10px 4px"></p>
+    <div class="group" id="catList"></div>
+    <button class="btn primary" id="catAdd" data-i18n="newCat">New category</button>
+  </div>
+</div>
+
+<!-- NEW / EDIT CATEGORY -->
+<div class="sheet" id="catEditSheet">
+  <div class="sheet-head">
+    <button class="link" id="ceCancel" data-i18n="cancel">Cancel</button>
+    <h3 id="ceTitle"></h3>
+    <button class="link strong" id="ceSave" data-i18n="save">Save</button>
+  </div>
+  <div class="sheet-body">
+    <div class="ce-top">
+      <span id="cePreview"></span>
+      <div class="field" style="flex:1;margin:0"><span data-i18n="catNameLabel">Name</span><input id="ceName" type="text" maxlength="20" autocomplete="off" autocapitalize="words"></div>
+    </div>
+    <button class="rate-reset" id="ceRestore" data-i18n="restoreName">Restore default name</button>
+    <div id="ceStyle">
+      <div class="label" data-i18n="icon">Icon</div>
+      <div class="cat-grid" id="ceIcons"></div>
+      <div class="label" data-i18n="color">Colour</div>
+      <div class="cat-grid" id="ceColors"></div>
+    </div>
+    <button class="btn" id="ceHide"></button>
+    <button class="danger" id="ceDelete" data-i18n="delete">Delete</button>
   </div>
 </div>
 
@@ -512,12 +573,67 @@ const GLYPHS = {
   other_in:  '<path d="M3 6.5h18v11H3z"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9.5v.01M18 14.5v.01"/>'
 };
 const TREE_SVG = '<svg class="tree" viewBox="0 0 24 24"><path d="M12 2.5 7 9h2.5L6 14h3l-3.5 5H11v2.5h2V19h5.5L15 14h3l-3.5-5H17z"/></svg>';
-const CAT_MAP = {};
-[...CATS.expense, ...CATS.income].forEach(c => CAT_MAP[c.id] = c);
-// Single entry point for category lists in new code (categories are planned to become user-editable).
-const catsFor = type => CATS[type];
-// A record's category; unknown ids (e.g. old data) fall back to that type's last category ("Other").
-function catOf(x){ const list = catsFor(x.type); return CAT_MAP[x.category] || list[list.length - 1]; }
+/* ---------- categories ----------
+   CATS stays the built-in default. User changes live in S:
+   catCustom [{id:'c_…', type, name, icon, c}], catOrder {expense:[id…], income:[id…]},
+   catHidden [id…] and catNames {builtInId: name} (renamed built-ins). */
+const CAT_TYPES = ['expense', 'income'];
+const FALLBACK_CAT = {expense:'other', income:'other_in'};   // used for unknown category ids
+const CUSTOM_ID = /^c_[a-z0-9]{1,24}$/i;   // ids go into HTML attributes, so letters/digits only
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const MAX_CUSTOM = 30;   // custom categories per type
+const CAT_COLORS = ['#FF453A','#FF9F0A','#EBB000','#30D158','#00C7BE','#40C8E0',
+                    '#0A84FF','#5E5CE6','#BF5AF2','#FF375F','#AC8E68','#8E8E93'];
+const BUILTIN_TYPE = {};
+CAT_TYPES.forEach(ty => CATS[ty].forEach(c => BUILTIN_TYPE[c.id] = ty));
+const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const catNameOk = n => typeof n === 'string' && n.trim().length >= 1 && n.trim().length <= 20;
+
+// Validate a category configuration (saved state or a backup's "cats"): invalid entries are dropped,
+// unknown ids removed, and categories missing from catOrder (e.g. built-ins added in a later version) appended.
+function normalizeCatConfig(raw){
+  raw = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const custom = [], typeOf = {...BUILTIN_TYPE}, seenNames = {expense:new Set(), income:new Set()};
+  for (const c of Array.isArray(raw.catCustom) ? raw.catCustom : []){
+    if (!c || typeof c !== 'object' || typeof c.id !== 'string' || !CUSTOM_ID.test(c.id) || hasOwn(typeOf, c.id)) continue;
+    if (!CAT_TYPES.includes(c.type) || !catNameOk(c.name) || typeof c.icon !== 'string' || !hasOwn(GLYPHS, c.icon)) continue;
+    if (typeof c.c !== 'string' || !HEX_COLOR.test(c.c)) continue;
+    const name = c.name.trim(), low = name.toLowerCase();
+    if (seenNames[c.type].has(low) || seenNames[c.type].size >= MAX_CUSTOM) continue;
+    seenNames[c.type].add(low); typeOf[c.id] = c.type;
+    custom.push({id: c.id, type: c.type, name, icon: c.icon, c: c.c});
+  }
+  const ids = v => Array.isArray(v) ? v.filter((id, i, a) => typeof id === 'string' && hasOwn(typeOf, id) && a.indexOf(id) === i) : [];
+  const catOrder = {};
+  for (const ty of CAT_TYPES){
+    const o = ids(raw.catOrder && raw.catOrder[ty]).filter(id => typeOf[id] === ty);
+    [...CATS[ty].map(c => c.id), ...custom.filter(c => c.type === ty).map(c => c.id)].forEach(id => { if (!o.includes(id)) o.push(id); });
+    catOrder[ty] = o;
+  }
+  const catNames = {};
+  if (raw.catNames && typeof raw.catNames === 'object' && !Array.isArray(raw.catNames)){
+    for (const [id, n] of Object.entries(raw.catNames)) if (hasOwn(BUILTIN_TYPE, id) && catNameOk(n)) catNames[id] = n.trim();
+  }
+  return {catCustom: custom, catOrder, catHidden: ids(raw.catHidden), catNames};
+}
+// Lookup for every category, hidden ones included, so old records always find theirs.
+// Rebuild at startup and after every category change.
+let CAT_MAP = {};
+function rebuildCatMap(){
+  Object.assign(S, normalizeCatConfig(S));
+  CAT_MAP = {};
+  CAT_TYPES.forEach(type => CATS[type].forEach(c => CAT_MAP[c.id] = {...c, type, icon: c.id, builtin: true}));
+  S.catCustom.forEach(c => CAT_MAP[c.id] = {...c, builtin: false});
+}
+// Single entry point for category lists: built-in + custom, in the user's order; hidden ones only on request.
+function catsFor(type, {includeHidden = false} = {}){
+  const list = S.catOrder[type].map(id => CAT_MAP[id]).filter(Boolean);
+  return includeHidden ? list : list.filter(c => !S.catHidden.includes(c.id));
+}
+// A record's category; unknown ids (e.g. old data) fall back to "Other" of that type.
+function catOf(x){ return CAT_MAP[x.category] || CAT_MAP[FALLBACK_CAT[x.type]]; }
+// Every name a category is known by (both languages, rename, custom name), for keyword search.
+function catSearchText(c){ return [c.en, c.zh, c.name, S.catNames[c.id]].filter(Boolean).join(' '); }
 
 const I18N = {
   en:{
@@ -549,6 +665,15 @@ const I18N = {
     searchPh:'Search notes or categories', all:'All', currency:'Currency', amountRm:'Amount (RM)',
     min:'Min', max:'Max', catAny:'Any', catSelected:'{n} selected', clearFilters:'Clear filters',
     searchHint:'Type a keyword or set a filter', noMatch:'No matching records', showMore:'Show more ({n} left)',
+    categories:'Categories', manageCats:'Manage categories', newCat:'New category', editCat:'Edit category',
+    catsHint:'Drag ≡ to reorder. Tap a category to rename, hide or delete it. Hidden categories still show on existing records.',
+    catNameLabel:'Name', icon:'Icon', color:'Colour', hide:'Hide category', show:'Show category', hiddenTag:'Hidden',
+    restoreName:'Restore default name', catNameBad:'Name must be 1–20 characters',
+    catNameDup:'A category with this name already exists', catLimit:'Up to {n} custom categories per type',
+    catInUse:'{n} records use this category, so it can only be hidden',
+    catInUse_1:'1 record uses this category, so it can only be hidden',
+    confirmDeleteCat:'Delete this category?', cantHideLast:'At least one category must stay visible',
+    catSaved:'Category saved', catDeleted:'Category deleted',
     about:'Your data is stored only on this iPhone. The app reminds you to back up to Files every week.',
     weekdays:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
     months:['January','February','March','April','May','June','July','August','September','October','November','December'],
@@ -583,6 +708,14 @@ const I18N = {
     searchPh:'搜索备注或分类', all:'全部', currency:'币种', amountRm:'金额 (RM)',
     min:'最低', max:'最高', catAny:'不限', catSelected:'已选 {n} 个', clearFilters:'清除筛选',
     searchHint:'输入关键字或设置筛选条件', noMatch:'没有符合条件的记录', showMore:'显示更多（还有 {n} 笔）',
+    categories:'分类', manageCats:'管理分类', newCat:'新增分类', editCat:'编辑分类',
+    catsHint:'拖动 ≡ 调整顺序。点击分类可改名、隐藏或删除。隐藏后，已有记录仍会显示该分类。',
+    catNameLabel:'名称', icon:'图标', color:'颜色', hide:'隐藏分类', show:'显示分类', hiddenTag:'已隐藏',
+    restoreName:'恢复默认名称', catNameBad:'名称需为 1–20 个字符',
+    catNameDup:'已有同名分类', catLimit:'每种类型最多 {n} 个自定义分类',
+    catInUse:'已有 {n} 笔记录使用此分类，只能隐藏',
+    confirmDeleteCat:'确定删除这个分类？', cantHideLast:'至少要保留一个可见分类',
+    catSaved:'分类已保存', catDeleted:'分类已删除',
     about:'数据只保存在这台 iPhone 上。App 每周会提醒你备份到"文件"。',
     weekdays:['日','一','二','三','四','五','六'],
     months:['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'],
@@ -595,6 +728,7 @@ const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 let loadCorrupt = false;   // set by load() when saved data could not be read; a toast is shown after boot
 let S = load();
+rebuildCatMap();
 const todayStr = () => ymd(new Date());
 const ui = {
   sel: todayStr(),
@@ -618,12 +752,13 @@ function load(){
               ratesUpdated: d.ratesUpdated || 0, tx: d.tx,
               lastBackup: d.lastBackup || 0, backupBase: d.backupBase || Date.now(), backupSnooze: d.backupSnooze || 0,
               curOrder: normalizeOrder(d.curOrder), ratesLive: Array.isArray(d.ratesLive) ? d.ratesLive : [],
-              ratesManual: Array.isArray(d.ratesManual) ? d.ratesManual.filter(c => c !== 'MYR' && CUR[c]) : []};
+              ratesManual: Array.isArray(d.ratesManual) ? d.ratesManual.filter(c => c !== 'MYR' && CUR[c]) : [],
+              ...normalizeCatConfig(d)};   // older data has no cat* fields: defaults (built-ins only)
     }
   }catch(e){}
   if (raw !== null) stashCorrupt(raw);   // data exists but is unreadable: keep a copy before the next save() overwrites it
   return {lang:'en', rates:{...DEFAULT_RATES}, ratesUpdated:0, tx:[], lastBackup:0, backupBase:Date.now(), backupSnooze:0,
-          curOrder: [...CUR_ORDER], ratesLive: [], ratesManual: []};
+          curOrder: [...CUR_ORDER], ratesLive: [], ratesManual: [], ...normalizeCatConfig({})};
 }
 // Never overwrite an earlier corrupt copy: add a timestamp suffix if one already exists.
 function stashCorrupt(raw){
@@ -649,6 +784,7 @@ function save(){
 function t(k, vars){
   let s = I18N[S.lang][k] ?? I18N.en[k] ?? k;
   if (k === 'entries' && S.lang === 'en' && vars && vars.n === 1) s = '1 entry';
+  if (vars && vars.n === 1 && I18N[S.lang][k + '_1']) s = I18N[S.lang][k + '_1'];   // singular wording
   if (vars) for (const v in vars) s = s.replace('{'+v+'}', vars[v]);
   return s;
 }
@@ -662,7 +798,12 @@ function fmt(n, cur='MYR'){
 }
 const fmtSigned = n => (n < 0 ? '-' : '') + fmt(n);
 function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-const catName = c => c ? c[S.lang] : '';
+// Custom categories have one name for both languages; built-ins use the user's rename if any.
+// The result is user text: always esc() it before putting it into HTML.
+function catName(c){
+  if (!c) return '';
+  return c.builtin === false ? c.name : (S.catNames[c.id] || c[S.lang]);
+}
 const sum = arr => round2(arr.reduce((a,x) => a + x.myr, 0));
 function monthLabel(y, m){ return S.lang === 'zh' ? `${y}年 ${m+1}月` : `${I18N.en.months[m]} ${y}`; }
 function shortMonth(d){ return S.lang === 'zh' ? `${d.getFullYear()}年${d.getMonth()+1}月` : `${I18N.en.mshort[d.getMonth()]} ${d.getFullYear()}`; }
@@ -687,7 +828,8 @@ function toast(msg){
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
 }
 function catIcon(c){
-  return `<span class="cat-ic" style="--c:${c.c}"><svg viewBox="0 0 24 24">${GLYPHS[c.id] || GLYPHS.other}</svg></span>`;
+  // custom categories pick a glyph (c.icon); built-ins use the glyph named after their id
+  return `<span class="cat-ic" style="--c:${c.c}"><svg viewBox="0 0 24 24">${GLYPHS[c.icon || c.id] || GLYPHS.other}</svg></span>`;
 }
 
 /* ---------- forest background ---------- */
@@ -855,10 +997,17 @@ function openTx(tx){
 function renderTxForm(){
   $$('#fType button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.fType));
   $('#fAmount').classList.toggle('income', ui.fType === 'income');
-  const list = CATS[ui.fType];
-  if (!list.some(c => c.id === ui.fCat)) ui.fCat = list[0].id;
+  let list = catsFor(ui.fType);   // hidden categories are not offered for new records…
+  // …but a record being edited keeps its hidden category: show it too, still selected
+  const cur = CAT_MAP[ui.fCat];
+  if (cur && cur.type === ui.fType && !list.includes(cur)) list = [...list, cur];
+  if (!list.some(c => c.id === ui.fCat)){
+    // unknown id on an old record → the "Other" it is shown as; new record → first category
+    const other = ui.fCat && !cur && list.find(c => c.id === FALLBACK_CAT[ui.fType]);
+    ui.fCat = (other || list[0]).id;
+  }
   $('#fCats').innerHTML = list.map(c =>
-    `<button class="cat-btn ${c.id === ui.fCat ? 'on' : ''}" data-c="${c.id}">${catIcon(c)}<span>${catName(c)}</span></button>`).join('');
+    `<button class="cat-btn ${c.id === ui.fCat ? 'on' : ''}" data-c="${c.id}">${catIcon(c)}<span>${esc(catName(c))}</span></button>`).join('');
   updateConv();
 }
 function updateConv(){
@@ -964,7 +1113,8 @@ function renderStats(){
   if (!items.length || total <= 0){ body.innerHTML = `<div class="card empty">${TREE_SVG}${t('noData')}</div>`; return; }
   const groups = {};
   for (const x of items){
-    const g = groups[x.category] ||= {cat: CAT_MAP[x.category] || CAT_MAP.other, v:0, txs:[]};
+    const cat = catOf(x);   // custom/hidden categories included; unknown ids grouped under "Other"
+    const g = groups[cat.id] ||= {cat, v:0, txs:[]};
     g.v += x.myr; g.txs.push(x);
   }
   const arr = Object.values(groups).sort((p, q) => q.v - p.v);
@@ -986,7 +1136,7 @@ function renderStats(){
     <div class="donut-wrap"><svg viewBox="0 0 180 180"><circle r="${r}" cx="90" cy="90" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="30"/>${segs}</svg>
       <div class="donut-center"><small>${t(st.type === 'expense' ? 'totalExpense' : 'totalIncome')}</small><strong style="color:${color}">${fmt(total)}</strong></div></div>
     <div class="legend" style="border-top:1px solid var(--line)">${arr.map(g =>
-      `<div><i style="background:${g.cat.c}"></i><span>${catName(g.cat)}</span><em>${pctTxt(g.v)}</em></div>`).join('')}</div>
+      `<div><i style="background:${g.cat.c}"></i><span>${esc(catName(g.cat))}</span><em>${pctTxt(g.v)}</em></div>`).join('')}</div>
   </div><div class="gap"></div>`;
 
   // details
@@ -996,7 +1146,7 @@ function renderStats(){
   for (const g of sorted){
     const open = st.open.has(g.cat.id);
     html += `<button class="cat-row" data-cat="${g.cat.id}">${catIcon(g.cat)}
-      <div class="main"><div class="top-line"><span>${catName(g.cat)}</span><span class="amt ${st.type}">${fmt(g.v)}</span></div>
+      <div class="main"><div class="top-line"><span>${esc(catName(g.cat))}</span><span class="amt ${st.type}">${fmt(g.v)}</span></div>
       <div class="bar"><i style="width:${pct(g.v).toFixed(1)}%;background:${g.cat.c}"></i></div>
       <div class="meta">${pctTxt(g.v)} · ${t('entries', {n: g.txs.length})} ${open ? '▴' : '▾'}</div></div></button>`;
     if (open){
@@ -1093,7 +1243,7 @@ function searchMatches(c){
     if (isFinite(c.max) && x.myr > c.max) return false;
     if (c.cur !== 'all' && x.currency !== c.cur) return false;
     if (c.terms.length){
-      const hay = (String(x.note || '') + ' ' + cat.en + ' ' + cat.zh).toLowerCase();
+      const hay = (String(x.note || '') + ' ' + catSearchText(cat)).toLowerCase();
       if (!c.terms.every(w => hay.includes(w))) return false;
     }
     return true;
@@ -1116,8 +1266,9 @@ function renderSearch(){
   $('#sCatToggle').innerHTML = `<span>${t('category')}</span><b>${s.cats.size ? t('catSelected', {n: s.cats.size}) : t('catAny')} ${s.catsOpen ? '▴' : '▾'}</b>`;
   const types = s.type === 'all' ? ['expense', 'income'] : [s.type];
   $('#sCats').innerHTML = !s.catsOpen ? '' : types.map(ty =>
-    `<div class="label">${t(ty)}</div><div class="cat-grid">${catsFor(ty).map(c =>
-      `<button class="cat-btn ${s.cats.has(c.id) ? 'on' : ''}" data-c="${c.id}">${catIcon(c)}<span>${catName(c)}</span></button>`).join('')}</div>`).join('');
+    `<div class="label">${t(ty)}</div><div class="cat-grid">${catsFor(ty, {includeHidden: true}).map(c =>   // hidden ones can still be filtered
+      `<button class="cat-btn ${s.cats.has(c.id) ? 'on' : ''}" data-c="${c.id}">${catIcon(c)}<span>${esc(catName(c))}</span>${
+        S.catHidden.includes(c.id) ? `<small class="s-hidden">${t('hiddenTag')}</small>` : ''}</button>`).join('')}</div>`).join('');
   renderSearchResults();
 }
 function renderSearchResults(){
@@ -1141,6 +1292,128 @@ function renderSearchResults(){
 // Any filter change starts again from the first page of results.
 function searchChanged(){ ui.search.limit = SEARCH_PAGE; renderSearchResults(); }
 
+/* ---------- category manager ----------
+   Settings → Categories → (edit). openSheet() manages one panel at a time, so each step closes the
+   current panel and opens the next one; Back/Cancel walk the same path in reverse. */
+ui.cm = {type: 'expense'};
+ui.catEdit = null;   // {id|null, type, builtin, icon, c} while the edit panel is open
+const catUseCount = id => S.tx.filter(x => x.category === id).length;
+function openCatManager(){ closeSheet(); renderCatManager(); openSheet('#catSheet'); }
+function backToSettings(){ closeSheet(); renderSettings(); openSheet('#setSheet'); }
+function backToCatManager(){ closeSheet(); renderCatManager(); openSheet('#catSheet'); }
+function renderCatManager(){
+  $$('#cmType button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.cm.type));
+  $('#catList').innerHTML = catsFor(ui.cm.type, {includeHidden: true}).map(c => {
+    const hidden = S.catHidden.includes(c.id);
+    return `<div class="rate-row cm-row${hidden ? ' is-hidden' : ''}" data-id="${c.id}">${GRIP_HTML}${catIcon(c)}
+      <span class="cm-name">${esc(catName(c))}</span>${hidden ? `<i class="def-badge cm-tag">${t('hiddenTag')}</i>` : ''}<span class="cm-chev">›</span></div>`;
+  }).join('');
+}
+function openCatEdit(id){
+  const c = id ? CAT_MAP[id] : null;
+  ui.catEdit = c ? {id, type: c.type, builtin: c.builtin, icon: c.icon, c: c.c}
+                 : {id: null, type: ui.cm.type, builtin: false, icon: 'other', c: CAT_COLORS[0]};
+  $('#ceName').value = c ? catName(c) : '';
+  $('#ceName').placeholder = c && c.builtin ? c[S.lang] : '';   // built-ins: hint at the default name
+  closeSheet(); renderCatEdit(); openSheet('#catEditSheet');
+}
+function renderCatEdit(){
+  const e = ui.catEdit;
+  $('#ceTitle').textContent = t(e.id ? 'editCat' : 'newCat');
+  $('#cePreview').innerHTML = catIcon(e);
+  $('#ceRestore').style.display = e.builtin && S.catNames[e.id] ? '' : 'none';
+  $('#ceStyle').style.display = e.builtin ? 'none' : '';   // built-ins keep their icon and colour
+  if (!e.builtin){
+    $('#ceIcons').innerHTML = Object.keys(GLYPHS).map(k =>
+      `<button class="cat-btn${k === e.icon ? ' on' : ''}" data-icon="${k}">${catIcon({icon: k, c: e.c})}</button>`).join('');
+    $('#ceColors').innerHTML = CAT_COLORS.map(col =>
+      `<button class="cat-btn swatch${col === e.c ? ' on' : ''}" data-color="${col}"><span class="cat-ic" style="--c:${col}"></span></button>`).join('');
+  }
+  $('#ceHide').style.display = e.id ? '' : 'none';
+  $('#ceHide').textContent = t(S.catHidden.includes(e.id) ? 'show' : 'hide');
+  $('#ceDelete').style.display = e.id && !e.builtin ? '' : 'none';   // built-ins can only be hidden
+}
+// 1–20 characters after trimming; no other category of the same type may use it (any case),
+// counting built-ins' default names in both languages as well as current names.
+function catNameError(name, type, selfId){
+  if (!catNameOk(name)) return 'catNameBad';
+  const low = name.trim().toLowerCase();
+  const clash = catsFor(type, {includeHidden: true}).some(c => c.id !== selfId &&
+    [catName(c), c.en, c.zh].some(n => n && n.toLowerCase() === low));
+  return clash ? 'catNameDup' : null;
+}
+function saveCat(){
+  const e = ui.catEdit, name = $('#ceName').value.trim();
+  const err = catNameError(name, e.type, e.id);
+  if (err){ toast(t(err)); return; }
+  if (e.builtin){
+    if (name === CAT_MAP[e.id][S.lang]) delete S.catNames[e.id]; else S.catNames[e.id] = name;
+  } else if (e.id){
+    Object.assign(S.catCustom.find(c => c.id === e.id), {name, icon: e.icon, c: e.c});
+  } else {
+    if (S.catCustom.filter(c => c.type === e.type).length >= MAX_CUSTOM){ toast(t('catLimit', {n: MAX_CUSTOM})); return; }
+    let id;
+    do { id = 'c_' + Math.random().toString(36).slice(2, 10); } while (CAT_MAP[id]);
+    S.catCustom.push({id, type: e.type, name, icon: e.icon, c: e.c});
+  }
+  rebuildCatMap(); save(); renderAll(); backToCatManager(); toast(t('catSaved'));
+}
+function toggleCatHidden(){
+  const e = ui.catEdit, hidden = S.catHidden.includes(e.id);
+  // keep at least one category to pick from when adding a record
+  if (!hidden && catsFor(e.type).length <= 1){ toast(t('cantHideLast')); return; }
+  S.catHidden = hidden ? S.catHidden.filter(id => id !== e.id) : [...S.catHidden, e.id];
+  rebuildCatMap(); save(); renderAll(); backToCatManager();
+}
+function deleteCat(){
+  const e = ui.catEdit, n = catUseCount(e.id);
+  if (n > 0){ toast(t('catInUse', {n})); return; }   // in use: can only be hidden
+  if (!confirm(t('confirmDeleteCat'))) return;
+  S.catCustom = S.catCustom.filter(c => c.id !== e.id);
+  rebuildCatMap(); save(); renderAll(); backToCatManager(); toast(t('catDeleted'));   // rebuild also drops it from order/hidden
+}
+function bindCatManager(){
+  $('#btnCats').onclick = openCatManager;
+  $('#catBack').onclick = backToSettings;
+  $('#cmType').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    ui.cm.type = b.dataset.v; renderCatManager();
+  });
+  bindDragList($('#catList'), (from, to) => {
+    if (to !== from){
+      const ty = ui.cm.type;
+      S.catOrder[ty] = moveItem(catsFor(ty, {includeHidden: true}).map(c => c.id), from, to);
+      save(); renderAll();
+    }
+    renderCatManager();
+  });
+  $('#catList').addEventListener('click', e => {
+    if (e.target.closest('.grip')) return;
+    const row = e.target.closest('.cm-row'); if (row) openCatEdit(row.dataset.id);
+  });
+  $('#catAdd').onclick = () => {
+    if (S.catCustom.filter(c => c.type === ui.cm.type).length >= MAX_CUSTOM){ toast(t('catLimit', {n: MAX_CUSTOM})); return; }
+    openCatEdit(null);
+  };
+  $('#ceCancel').onclick = backToCatManager;
+  $('#ceSave').onclick = saveCat;
+  $('#ceHide').onclick = toggleCatHidden;
+  $('#ceDelete').onclick = deleteCat;
+  $('#ceRestore').onclick = () => {
+    const e = ui.catEdit; delete S.catNames[e.id];
+    $('#ceName').value = CAT_MAP[e.id][S.lang];
+    save(); renderAll(); renderCatEdit();
+  };
+  $('#ceIcons').addEventListener('click', e => {
+    const b = e.target.closest('[data-icon]'); if (!b) return;
+    ui.catEdit.icon = b.dataset.icon; renderCatEdit();
+  });
+  $('#ceColors').addEventListener('click', e => {
+    const b = e.target.closest('[data-color]'); if (!b) return;
+    ui.catEdit.c = b.dataset.color; renderCatEdit();
+  });
+}
+
 /* ---------- settings ---------- */
 // Currency picker in the add/edit sheet follows the user's order; keeps the current selection.
 function renderCurOptions(){
@@ -1148,9 +1421,10 @@ function renderCurOptions(){
   sel.innerHTML = S.curOrder.map(c => `<option value="${c}">${CUR[c].label}</option>`).join('');
   if (v) sel.value = v;
 }
-// Drag the ≡ handle to reorder currencies (pointer events work for touch and mouse).
-function bindRateDrag(){
-  const list = $('#rateList');
+const GRIP_HTML = '<span class="grip" aria-label="Drag to reorder"><svg viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg></span>';
+// Drag the ≡ handle to reorder the .rate-row rows of a list (pointer events work for touch and mouse).
+// onDrop(from, to) runs after every drag (from === to if nothing moved) and must redraw the list.
+function bindDragList(list, onDrop){
   list.addEventListener('pointerdown', e => {
     const grip = e.target.closest('.grip'); if (!grip) return;
     e.preventDefault();
@@ -1173,19 +1447,22 @@ function bindRateDrag(){
       grip.removeEventListener('pointermove', move);
       grip.removeEventListener('pointerup', up);
       grip.removeEventListener('pointercancel', up);
-      if (to !== from){
-        const o = [...S.curOrder]; const [c] = o.splice(from, 1); o.splice(to, 0, c);
-        S.curOrder = o; save(); renderCurOptions();
-      }
-      renderSettings();
+      onDrop(from, to);
     };
     grip.addEventListener('pointermove', move);
     grip.addEventListener('pointerup', up);
     grip.addEventListener('pointercancel', up);
   });
 }
+const moveItem = (arr, from, to) => { const o = [...arr]; const [x] = o.splice(from, 1); o.splice(to, 0, x); return o; };
+function bindRateDrag(){
+  bindDragList($('#rateList'), (from, to) => {
+    if (to !== from){ S.curOrder = moveItem(S.curOrder, from, to); save(); renderCurOptions(); }
+    renderSettings();
+  });
+}
 function renderSettings(){
-  const grip = '<span class="grip" aria-label="Drag to reorder"><svg viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg></span>';
+  const grip = GRIP_HTML;
   const badge = i => i === 0 ? `<i class="def-badge">${t('defaultBadge')}</i>` : '';
   $('#rateList').innerHTML = S.curOrder.map((c, i) => c === 'MYR'
     ? `<div class="rate-row" data-code="MYR">${grip}<span class="code">RM</span><span class="eq">${badge(i)}${t('baseCur')}</span></div>`
@@ -1426,7 +1703,7 @@ function bind(){
     const b = e.target.closest('button'); if (!b) return;
     const s = ui.search; s.type = b.dataset.v;
     // drop selected categories that the chosen type no longer shows
-    if (s.type !== 'all'){ const ids = new Set(catsFor(s.type).map(c => c.id)); s.cats = new Set([...s.cats].filter(id => ids.has(id))); }
+    if (s.type !== 'all'){ const ids = new Set(catsFor(s.type, {includeHidden: true}).map(c => c.id)); s.cats = new Set([...s.cats].filter(id => ids.has(id))); }
     s.limit = SEARCH_PAGE; renderSearch();
   });
   $('#sCatToggle').onclick = () => { ui.search.catsOpen = !ui.search.catsOpen; renderSearch(); };
@@ -1449,6 +1726,7 @@ function bind(){
     S.lang = b.dataset.v; save(); applyLang(); renderSettings(); renderAll();
   });
   bindRateDrag();
+  bindCatManager();
   $('#rateList').addEventListener('change', e => {
     const inp = e.target.closest('input'); if (!inp) return;
     const c = inp.dataset.cur, v = parseNum(inp.value);
